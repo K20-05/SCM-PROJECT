@@ -115,3 +115,21 @@ async def debug_users():
             for user in users
         ],
     }
+
+
+@router.delete("/debug/cleanup-plain-password-users")
+async def cleanup_plain_password_users():
+    if os.getenv("DEBUG_ROUTES_ENABLED", "false").lower() != "true":
+        raise HTTPException(status_code=404, detail="Not found")
+
+    result = await users_collection.delete_many(
+        {
+            "password": {"$exists": True},
+            "$or": [
+                {"password_hash": {"$exists": False}},
+                {"password_hash": ""},
+                {"password_hash": None},
+            ],
+        }
+    )
+    return {"deleted_count": result.deleted_count}

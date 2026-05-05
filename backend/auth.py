@@ -14,6 +14,9 @@ from backend.database.mongo import users_collection
 JWT_SECRET_KEY = os.getenv("JWT_SECRET_KEY", "change-me-in-env")
 JWT_EXPIRE_MINUTES = int(os.getenv("JWT_EXPIRE_MINUTES", "60"))
 
+if JWT_SECRET_KEY in {"change-me-in-env", "change-this-to-a-strong-random-secret"}:
+    raise RuntimeError("Set a strong JWT_SECRET_KEY in .env before starting the app")
+
 
 def generate_password_hash(password: str) -> str:
     return bcrypt.hashpw(password.encode("utf-8"), bcrypt.gensalt()).decode("utf-8")
