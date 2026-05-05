@@ -1,8 +1,11 @@
 from fastapi import APIRouter, Header, HTTPException
+from pymongo.errors import DuplicateKeyError
+import os
+from datetime import datetime, timezone
 
-from backend.db.database import users_collection
-from backend.models.auth_models import ChangePasswordRequest, UserLogin, UserSignup
-from backend.services.auth_service import (
+from backend.database.mongo import logins_collection, users_collection
+from backend.models.user_model import ChangePasswordRequest, UserLogin, UserSignup
+from backend.auth import (
     create_access_token,
     decode_access_token,
     extract_bearer_token,
@@ -28,7 +31,10 @@ async def signup(user: UserSignup):
         "phone": user.phone,
         "password_hash": generate_password_hash(user.password),
     }
-    await users_collection.insert_one(user_document)
+    try:
+        await users_collection.insert_one(user_document)
+    except DuplicateKeyError:
+        raise HTTPException(status_code=400, detail="User already exists") from None
 
     return {
         "message": "User registered successfully",
@@ -45,6 +51,13 @@ async def login(user: UserLogin):
     password_hash = stored_user.get("password_hash", "")
     if not password_hash or not verify_password(user.password, password_hash):
         raise HTTPException(status_code=401, detail="Invalid credentials")
+
+    await logins_collection.insert_one(
+        {
+            "email": stored_user["email"],
+            "logged_in_at": datetime.now(timezone.utc),
+        }
+    )
 
     return {
         "message": "Login successful",
@@ -79,3 +92,26 @@ async def change_password(
         {"$set": {"password_hash": new_hash}},
     )
     return {"message": "Password changed successfully"}
+
+
+@router.get("/debug/users")
+async def debug_users():
+    if os.getenv("DEBUG_ROUTES_ENABLED", "false").lower() != "true":
+        raise HTTPException(status_code=404, detail="Not found")
+
+    users = await users_collection.find(
+        {},
+        {"_id": 0, "email": 1, "password_hash": 1, "password": 1},
+    ).to_list(length=1000)
+
+    return {
+        "count": len(users),
+        "users": [
+            {
+                "email": user.get("email"),
+                "has_password_hash": bool(user.get("password_hash")),
+                "has_plain_password": bool(user.get("password")),
+            }
+            for user in users
+        ],
+    }

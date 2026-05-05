@@ -8,7 +8,7 @@ from datetime import datetime, timedelta, timezone
 import bcrypt
 from fastapi import HTTPException
 
-from backend.db.database import users_collection
+from backend.database.mongo import users_collection
 
 
 JWT_SECRET_KEY = os.getenv("JWT_SECRET_KEY", "change-me-in-env")

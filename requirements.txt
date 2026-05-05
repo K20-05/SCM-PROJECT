@@ -3,3 +3,5 @@ uvicorn
 motor
 bcrypt
 python-dotenv
+python-jose[cryptography]  # for JWT
+pydantic
