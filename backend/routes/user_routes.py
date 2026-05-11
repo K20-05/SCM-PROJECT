@@ -1,8 +1,9 @@
-from fastapi import APIRouter, Header, HTTPException
+from fastapi import APIRouter, Depends, Header, HTTPException
 from pymongo.errors import DuplicateKeyError
 import os
 from datetime import datetime, timezone
 
+from backend.config.app_config import DEFAULT_ROLE
 from backend.database.mongo import logins_collection, users_collection
 from backend.models.user_model import ChangePasswordRequest, UserLogin, UserSignup
 from backend.auth import (
@@ -11,7 +12,11 @@ from backend.auth import (
     extract_bearer_token,
     generate_password_hash,
     get_user_by_email,
+    get_user_by_id,
     get_user_data,
+    get_role_by_name,
+    role_exists,
+    require_role,
     verify_password,
 )
 
@@ -25,11 +30,29 @@ async def signup(user: UserSignup):
     if existing_user:
         raise HTTPException(status_code=400, detail="User already exists")
 
+    admin_user = await get_user_by_id(user.admin_id)
+    if not admin_user:
+        raise HTTPException(status_code=403, detail="Invalid admin_id")
+
+    admin_role_name = str(admin_user.get("role", "")).strip().lower()
+    admin_role = await get_role_by_name(admin_role_name)
+    required_role = await get_role_by_name("admin")
+    if not admin_role or not required_role or admin_role["level"] < required_role["level"]:
+        raise HTTPException(status_code=403, detail="admin_id does not have permission to create users")
+
+    assigned_role = DEFAULT_ROLE
+    if not await role_exists(assigned_role):
+        raise HTTPException(status_code=400, detail="Invalid role")
+
     user_document = {
         "name": user.name,
         "email": user.email,
         "phone": user.phone,
         "password_hash": generate_password_hash(user.password),
+        "role": assigned_role,
+        "created_by_admin_id": user.admin_id,
+        "created_at": datetime.now(timezone.utc),
+        "updated_at": datetime.now(timezone.utc),
     }
     try:
         await users_collection.insert_one(user_document)
@@ -55,6 +78,7 @@ async def login(user: UserLogin):
     await logins_collection.insert_one(
         {
             "email": stored_user["email"],
+            "role": stored_user.get("role", DEFAULT_ROLE),
             "logged_in_at": datetime.now(timezone.utc),
         }
     )
@@ -62,7 +86,10 @@ async def login(user: UserLogin):
     return {
         "message": "Login successful",
         "token_type": "bearer",
-        "access_token": create_access_token(stored_user["email"]),
+        "access_token": create_access_token(
+            stored_user["email"],
+            stored_user.get("role", DEFAULT_ROLE),
+        ),
         "user": get_user_data(stored_user),
     }
 
@@ -95,13 +122,13 @@ async def change_password(
 
 
 @router.get("/debug/users")
-async def debug_users():
+async def debug_users(_current_user: dict = Depends(require_role("admin"))):
     if os.getenv("DEBUG_ROUTES_ENABLED", "false").lower() != "true":
         raise HTTPException(status_code=404, detail="Not found")
 
     users = await users_collection.find(
         {},
-        {"_id": 0, "email": 1, "password_hash": 1, "password": 1},
+        {"_id": 0, "email": 1, "password_hash": 1, "password": 1, "role": 1},
     ).to_list(length=1000)
 
     return {
@@ -109,6 +136,7 @@ async def debug_users():
         "users": [
             {
                 "email": user.get("email"),
+                "role": user.get("role"),
                 "has_password_hash": bool(user.get("password_hash")),
                 "has_plain_password": bool(user.get("password")),
             }
@@ -118,7 +146,9 @@ async def debug_users():
 
 
 @router.delete("/debug/cleanup-plain-password-users")
-async def cleanup_plain_password_users():
+async def cleanup_plain_password_users(
+    _current_user: dict = Depends(require_role("super_admin")),
+):
     if os.getenv("DEBUG_ROUTES_ENABLED", "false").lower() != "true":
         raise HTTPException(status_code=404, detail="Not found")
 
@@ -133,3 +163,13 @@ async def cleanup_plain_password_users():
         }
     )
     return {"deleted_count": result.deleted_count}
+
+
+@router.get("/admin-only")
+async def admin_only(_current_user: dict = Depends(require_role("admin"))):
+    return {"message": "Admin access granted"}
+
+
+@router.get("/super-admin-only")
+async def super_admin_only(_current_user: dict = Depends(require_role("super_admin"))):
+    return {"message": "Super admin access granted"}

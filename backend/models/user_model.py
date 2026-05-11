@@ -9,6 +9,7 @@ class UserSignup(BaseModel):
     phone: str
     password: str
     confirm_password: str
+    admin_id: str
 
     @field_validator("email")
     @classmethod
@@ -38,6 +39,14 @@ class UserSignup(BaseModel):
         if len(value) < 8:
             raise ValueError("Password must be at least 8 characters")
         return value
+
+    @field_validator("admin_id")
+    @classmethod
+    def admin_id_must_not_be_empty(cls, value: str) -> str:
+        normalized = value.strip()
+        if not normalized:
+            raise ValueError("admin_id is required")
+        return normalized
 
 
 class UserLogin(BaseModel):

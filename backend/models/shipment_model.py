@@ -1,2 +1,1 @@
 # Shipment model placeholder
-

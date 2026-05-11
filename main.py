@@ -3,8 +3,9 @@ import logging
 
 import uvicorn
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 
-from backend.database.mongo import ensure_indexes
+from backend.database.mongo import ensure_database_setup
 from backend.routes.user_routes import router
 
 logger = logging.getLogger("uvicorn.error")
@@ -12,7 +13,7 @@ logger = logging.getLogger("uvicorn.error")
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    await ensure_indexes()
+    await ensure_database_setup()
     registered_routes = sorted(
         f"{','.join(sorted(route.methods))} {route.path}"
         for route in app.routes
@@ -23,6 +24,15 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(title="Signup and Login API", lifespan=lifespan)
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
 app.include_router(router)
 
 

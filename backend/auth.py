@@ -1,21 +1,29 @@
-import base64
-import hashlib
-import hmac
-import json
-import os
 from datetime import datetime, timedelta, timezone
 
 import bcrypt
-from fastapi import HTTPException
+from bson import ObjectId
+from fastapi import Depends, HTTPException, status
+from fastapi.security import OAuth2PasswordBearer
+from jose import JWTError, jwt
 
+from backend.config.app_config import (
+    JWT_ALGORITHM,
+    JWT_EXPIRE_MINUTES,
+    JWT_SECRET_KEY,
+    load_role_seed_data,
+)
 from backend.database.mongo import users_collection
 
 
-JWT_SECRET_KEY = os.getenv("JWT_SECRET_KEY", "change-me-in-env")
-JWT_EXPIRE_MINUTES = int(os.getenv("JWT_EXPIRE_MINUTES", "60"))
-
 if JWT_SECRET_KEY in {"change-me-in-env", "change-this-to-a-strong-random-secret"}:
     raise RuntimeError("Set a strong JWT_SECRET_KEY in .env before starting the app")
+
+credentials_exception = HTTPException(
+    status_code=status.HTTP_401_UNAUTHORIZED,
+    detail="Could not validate credentials",
+    headers={"WWW-Authenticate": "Bearer"},
+)
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/user/login")
 
 
 def generate_password_hash(password: str) -> str:
@@ -29,20 +37,21 @@ def verify_password(plain_password: str, password_hash: str) -> bool:
         return False
 
 
-def create_access_token(user_email: str) -> str:
+def create_access_token(user_email: str, role: str) -> str:
     now = datetime.now(timezone.utc)
     payload: dict[str, str | int] = {
         "sub": user_email,
+        "role": role,
         "iat": int(now.timestamp()),
         "exp": int((now + timedelta(minutes=JWT_EXPIRE_MINUTES)).timestamp()),
     }
-    return _encode_jwt(payload)
+    return jwt.encode(payload, JWT_SECRET_KEY, algorithm=JWT_ALGORITHM)
 
 
 def decode_access_token(token: str) -> dict:
     try:
-        return _decode_jwt(token)
-    except ValueError:
+        return jwt.decode(token, JWT_SECRET_KEY, algorithms=[JWT_ALGORITHM])
+    except JWTError:
         raise HTTPException(status_code=401, detail="Invalid or expired token") from None
 
 
@@ -59,55 +68,67 @@ async def get_user_by_email(email: str) -> dict | None:
     return await users_collection.find_one({"email": email})
 
 
+async def get_user_by_id(user_id: str) -> dict | None:
+    if not ObjectId.is_valid(user_id):
+        return None
+    return await users_collection.find_one({"_id": ObjectId(user_id)})
+
+
+def _role_levels() -> dict[str, int]:
+    return {role["name"]: role["level"] for role in load_role_seed_data()}
+
+
+async def get_role_by_name(role_name: str) -> dict | None:
+    levels = _role_levels()
+    normalized = role_name.strip().lower()
+    if normalized not in levels:
+        return None
+    return {"name": normalized, "level": levels[normalized]}
+
+
+async def role_exists(role_name: str) -> bool:
+    role = await get_role_by_name(role_name)
+    return role is not None
+
+
 def get_user_data(user_document: dict) -> dict:
     return {
         "name": user_document["name"],
         "email": user_document["email"],
         "phone": user_document["phone"],
+        "role": user_document.get("role", "user"),
     }
 
 
-def _b64url_encode(raw: bytes) -> str:
-    return base64.urlsafe_b64encode(raw).decode("utf-8").rstrip("=")
+async def get_current_user(token: str = Depends(oauth2_scheme)):
+    try:
+        payload = jwt.decode(token, JWT_SECRET_KEY, algorithms=[JWT_ALGORITHM])
+        user_email = payload.get("sub")
+        if not user_email:
+            raise credentials_exception
+    except JWTError:
+        raise credentials_exception
+
+    user = await users_collection.find_one({"email": user_email})
+    if user is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+    return user
 
 
-def _b64url_decode(raw: str) -> bytes:
-    padding = "=" * (-len(raw) % 4)
-    return base64.urlsafe_b64decode(raw + padding)
+def require_role(required_role_name: str):
+    async def role_dependency(current_user: dict = Depends(get_current_user)) -> dict:
+        user_role_name = current_user.get("role")
+        if not user_role_name:
+            raise HTTPException(status_code=403, detail="User role not assigned")
 
+        user_role = await get_role_by_name(user_role_name)
+        required_role = await get_role_by_name(required_role_name)
+        if not user_role or not required_role:
+            raise HTTPException(status_code=403, detail="Role configuration not found")
 
-def _sign(signing_input: bytes) -> str:
-    signature = hmac.new(JWT_SECRET_KEY.encode("utf-8"), signing_input, hashlib.sha256).digest()
-    return _b64url_encode(signature)
+        if user_role.get("level", 0) < required_role.get("level", 0):
+            raise HTTPException(status_code=403, detail="Insufficient permissions")
 
+        return current_user
 
-def _encode_jwt(payload: dict) -> str:
-    header = {"alg": "HS256", "typ": "JWT"}
-    header_b64 = _b64url_encode(json.dumps(header, separators=(",", ":")).encode("utf-8"))
-    payload_b64 = _b64url_encode(json.dumps(payload, separators=(",", ":")).encode("utf-8"))
-    signing_input = f"{header_b64}.{payload_b64}".encode("utf-8")
-    return f"{header_b64}.{payload_b64}.{_sign(signing_input)}"
-
-
-def _decode_jwt(token: str) -> dict:
-    parts = token.split(".")
-    if len(parts) != 3:
-        raise ValueError("Malformed token")
-    header_b64, payload_b64, provided_signature = parts
-    signing_input = f"{header_b64}.{payload_b64}".encode("utf-8")
-
-    expected_signature = _sign(signing_input)
-    if not hmac.compare_digest(expected_signature, provided_signature):
-        raise ValueError("Invalid signature")
-
-    header = json.loads(_b64url_decode(header_b64).decode("utf-8"))
-    if header.get("typ") != "JWT":
-        raise ValueError("Invalid header")
-
-    payload = json.loads(_b64url_decode(payload_b64).decode("utf-8"))
-    exp = payload.get("exp")
-    if not isinstance(exp, int):
-        raise ValueError("Missing exp")
-    if int(datetime.now(timezone.utc).timestamp()) >= exp:
-        raise ValueError("Token expired")
-    return payload
+    return role_dependency
