@@ -1,21 +1,19 @@
 from datetime import datetime, timedelta, timezone
 
-import bcrypt
 from bson import ObjectId
 from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
 from jose import JWTError, jwt
 
+from auth.auth_utils import hash_password, verify_password as verify_password_hash
 from backend.config.app_config import (
-    JWT_ALGORITHM,
-    JWT_EXPIRE_MINUTES,
-    JWT_SECRET_KEY,
+    settings,
     load_role_seed_data,
 )
-from backend.database.mongo import users_collection
+from backend.database.mongo import get_users_collection
 
 
-if JWT_SECRET_KEY in {"change-me-in-env", "change-this-to-a-strong-random-secret"}:
+if settings.jwt_secret in {"change-me-in-env", "change-this-to-a-strong-random-secret"}:
     raise RuntimeError("Set a strong JWT_SECRET_KEY in .env before starting the app")
 
 credentials_exception = HTTPException(
@@ -24,71 +22,47 @@ credentials_exception = HTTPException(
     headers={"WWW-Authenticate": "Bearer"},
 )
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/user/login")
+ROLE_LEVELS = {role["name"]: role["level"] for role in load_role_seed_data()}
 
 
 def generate_password_hash(password: str) -> str:
-    return bcrypt.hashpw(password.encode("utf-8"), bcrypt.gensalt()).decode("utf-8")
+    return hash_password(password)
 
 
 def verify_password(plain_password: str, password_hash: str) -> bool:
     try:
-        return bcrypt.checkpw(plain_password.encode("utf-8"), password_hash.encode("utf-8"))
+        return verify_password_hash(plain_password, password_hash)
     except ValueError:
         return False
 
 
-def create_access_token(user_email: str, role: str) -> str:
+def create_access_token(user_id: str) -> str:
     now = datetime.now(timezone.utc)
     payload: dict[str, str | int] = {
-        "sub": user_email,
-        "role": role,
+        "sub": user_id,
         "iat": int(now.timestamp()),
-        "exp": int((now + timedelta(minutes=JWT_EXPIRE_MINUTES)).timestamp()),
+        "exp": int((now + timedelta(minutes=settings.jwt_expire_minutes)).timestamp()),
     }
-    return jwt.encode(payload, JWT_SECRET_KEY, algorithm=JWT_ALGORITHM)
-
-
-def decode_access_token(token: str) -> dict:
-    try:
-        return jwt.decode(token, JWT_SECRET_KEY, algorithms=[JWT_ALGORITHM])
-    except JWTError:
-        raise HTTPException(status_code=401, detail="Invalid or expired token") from None
-
-
-def extract_bearer_token(authorization: str | None) -> str:
-    if not authorization:
-        raise HTTPException(status_code=401, detail="Authorization header required")
-    scheme, _, token = authorization.partition(" ")
-    if scheme.lower() != "bearer" or not token:
-        raise HTTPException(status_code=401, detail="Invalid authorization format")
-    return token
+    return jwt.encode(payload, settings.jwt_secret, algorithm=settings.jwt_algorithm)
 
 
 async def get_user_by_email(email: str) -> dict | None:
-    return await users_collection.find_one({"email": email})
+    return await get_users_collection().find_one({"email": email})
 
 
 async def get_user_by_id(user_id: str) -> dict | None:
     if not ObjectId.is_valid(user_id):
         return None
-    return await users_collection.find_one({"_id": ObjectId(user_id)})
+    return await get_users_collection().find_one({"_id": ObjectId(user_id)})
 
 
-def _role_levels() -> dict[str, int]:
-    return {role["name"]: role["level"] for role in load_role_seed_data()}
-
-
-async def get_role_by_name(role_name: str) -> dict | None:
-    levels = _role_levels()
+def get_role_level(role_name: str) -> int | None:
     normalized = role_name.strip().lower()
-    if normalized not in levels:
-        return None
-    return {"name": normalized, "level": levels[normalized]}
+    return ROLE_LEVELS.get(normalized)
 
 
-async def role_exists(role_name: str) -> bool:
-    role = await get_role_by_name(role_name)
-    return role is not None
+def role_exists(role_name: str) -> bool:
+    return get_role_level(role_name) is not None
 
 
 def get_user_data(user_document: dict) -> dict:
@@ -102,33 +76,28 @@ def get_user_data(user_document: dict) -> dict:
 
 async def get_current_user(token: str = Depends(oauth2_scheme)):
     try:
-        payload = jwt.decode(token, JWT_SECRET_KEY, algorithms=[JWT_ALGORITHM])
-        user_email = payload.get("sub")
-        if not user_email:
+        payload = jwt.decode(token, settings.jwt_secret, algorithms=[settings.jwt_algorithm])
+        user_id = payload.get("sub")
+        if not user_id:
             raise credentials_exception
     except JWTError:
         raise credentials_exception
 
-    user = await users_collection.find_one({"email": user_email})
+    if not ObjectId.is_valid(user_id):
+        raise credentials_exception
+    user = await get_users_collection().find_one({"_id": ObjectId(user_id)})
     if user is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
     return user
 
 
-def require_role(required_role_name: str):
-    async def role_dependency(current_user: dict = Depends(get_current_user)) -> dict:
-        user_role_name = current_user.get("role")
-        if not user_role_name:
-            raise HTTPException(status_code=403, detail="User role not assigned")
+async def admin_required(user: dict = Depends(get_current_user)):
+    if user.get("role") != "admin":
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Admin access required")
+    return user
 
-        user_role = await get_role_by_name(user_role_name)
-        required_role = await get_role_by_name(required_role_name)
-        if not user_role or not required_role:
-            raise HTTPException(status_code=403, detail="Role configuration not found")
 
-        if user_role.get("level", 0) < required_role.get("level", 0):
-            raise HTTPException(status_code=403, detail="Insufficient permissions")
-
-        return current_user
-
-    return role_dependency
+async def super_admin_required(user: dict = Depends(get_current_user)):
+    if user.get("role") != "super_admin":
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Super admin access required")
+    return user

@@ -1,34 +1,7 @@
 import json
-import os
-from pathlib import Path
 
-from dotenv import load_dotenv
-
-
-ROOT_ENV = Path(__file__).resolve().parents[2] / ".env"
-load_dotenv(ROOT_ENV)
-
-
-MONGODB_URL = os.getenv("MONGODB_URL")
-MONGODB_DB_NAME = os.getenv("MONGODB_DB_NAME", "scm_project")
-
-JWT_SECRET_KEY = os.getenv("JWT_SECRET_KEY", "change-me-in-env")
-JWT_EXPIRE_MINUTES = int(os.getenv("JWT_EXPIRE_MINUTES", "60"))
-JWT_ALGORITHM = os.getenv("JWT_ALGORITHM", "HS256")
-
-DEFAULT_ROLE = os.getenv("DEFAULT_ROLE", "user").strip().lower()
-
-def get_required_env(name: str) -> str:
-    value = os.getenv(name, "").strip()
-    if not value:
-        raise RuntimeError(f"{name} is required in .env")
-    return value
-
-
-USERS_COLLECTION_NAME = get_required_env("USERS_COLLECTION_NAME")
-LOGINS_COLLECTION_NAME = get_required_env("LOGINS_COLLECTION_NAME")
-SENSOR_DATA_COLLECTION_NAME = get_required_env("SENSOR_DATA_COLLECTION_NAME")
-SHIPMENTS_COLLECTION_NAME = get_required_env("SHIPMENTS_COLLECTION_NAME")
+from pydantic import AliasChoices, Field
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 DEFAULT_ROLES = [
     {"name": "user", "level": 10},
@@ -37,8 +10,42 @@ DEFAULT_ROLES = [
 ]
 
 
+class Settings(BaseSettings):
+    model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
+
+    mongo_url: str = Field(validation_alias=AliasChoices("MONGO_URL", "MONGODB_URL"))
+    db_name: str = Field(default="scm_project", validation_alias=AliasChoices("DB_NAME", "MONGODB_DB_NAME"))
+    jwt_secret: str = Field(
+        default="change-me-in-env",
+        validation_alias=AliasChoices("JWT_SECRET", "JWT_SECRET_KEY"),
+    )
+    jwt_expire_minutes: int = Field(default=60, validation_alias="JWT_EXPIRE_MINUTES")
+    jwt_algorithm: str = Field(default="HS256", validation_alias="JWT_ALGORITHM")
+    environment: str = Field(default="dev", validation_alias="ENVIRONMENT")
+    app_version: str = Field(default="0.1.0", validation_alias="APP_VERSION")
+    default_role: str = Field(default="user", validation_alias="DEFAULT_ROLE")
+    cors_origins: str = Field(default="http://localhost:3000", validation_alias="CORS_ORIGINS")
+
+    users_collection_name: str = Field(default="users", validation_alias="USERS_COLLECTION_NAME")
+    logins_collection_name: str = Field(default="logins", validation_alias="LOGINS_COLLECTION_NAME")
+    sensor_data_collection_name: str = Field(default="sensor_data", validation_alias="SENSOR_DATA_COLLECTION_NAME")
+    shipments_collection_name: str = Field(default="shipments", validation_alias="SHIPMENTS_COLLECTION_NAME")
+    admin_email: str = Field(default="", validation_alias="ADMIN_EMAIL")
+    admin_password: str = Field(default="", validation_alias="ADMIN_PASSWORD")
+    admin_name: str = Field(default="System Admin", validation_alias="ADMIN_NAME")
+    admin_phone: str = Field(default="", validation_alias="ADMIN_PHONE")
+    default_roles_json: str = Field(default="", validation_alias="DEFAULT_ROLES_JSON")
+
+
+settings = Settings()
+
+
+def get_settings() -> Settings:
+    return settings
+
+
 def load_role_seed_data() -> list[dict]:
-    raw_role_data = os.getenv("DEFAULT_ROLES_JSON", "").strip()
+    raw_role_data = settings.default_roles_json.strip()
     if not raw_role_data:
         return DEFAULT_ROLES
 

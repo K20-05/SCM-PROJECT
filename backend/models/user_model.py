@@ -9,7 +9,6 @@ class UserSignup(BaseModel):
     phone: str
     password: str
     confirm_password: str
-    admin_id: str
 
     @field_validator("email")
     @classmethod
@@ -26,13 +25,6 @@ class UserSignup(BaseModel):
             raise ValueError("Phone number must be 10 digits")
         return value
 
-    @field_validator("confirm_password")
-    @classmethod
-    def passwords_match(cls, value: str, info: ValidationInfo) -> str:
-        if "password" in info.data and value != info.data["password"]:
-            raise ValueError("Passwords do not match")
-        return value
-
     @field_validator("password")
     @classmethod
     def password_min_length(cls, value: str) -> str:
@@ -40,14 +32,12 @@ class UserSignup(BaseModel):
             raise ValueError("Password must be at least 8 characters")
         return value
 
-    @field_validator("admin_id")
+    @field_validator("confirm_password")
     @classmethod
-    def admin_id_must_not_be_empty(cls, value: str) -> str:
-        normalized = value.strip()
-        if not normalized:
-            raise ValueError("admin_id is required")
-        return normalized
-
+    def passwords_match(cls, value: str, info: ValidationInfo) -> str:
+        if "password" in info.data and value != info.data["password"]:
+            raise ValueError("Passwords do not match")
+        return value
 
 class UserLogin(BaseModel):
     email: str
@@ -59,16 +49,16 @@ class ChangePasswordRequest(BaseModel):
     new_password: str
     confirm_new_password: str
 
-    @field_validator("confirm_new_password")
-    @classmethod
-    def new_passwords_match(cls, value: str, info: ValidationInfo) -> str:
-        if "new_password" in info.data and value != info.data["new_password"]:
-            raise ValueError("New passwords do not match")
-        return value
-
     @field_validator("new_password")
     @classmethod
     def new_password_min_length(cls, value: str) -> str:
         if len(value) < 8:
             raise ValueError("New password must be at least 8 characters")
+        return value
+
+    @field_validator("confirm_new_password")
+    @classmethod
+    def new_passwords_match(cls, value: str, info: ValidationInfo) -> str:
+        if "new_password" in info.data and value != info.data["new_password"]:
+            raise ValueError("New passwords do not match")
         return value
