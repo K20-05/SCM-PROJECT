@@ -79,7 +79,7 @@ async def update_user_role(
 @router.delete("/users/{user_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_user(
     user_id: str,
-    _current_user: dict = Depends(require_role("admin")),
+    _current_user: dict = Depends(require_role("super_admin")),
 ):
     if not ObjectId.is_valid(user_id):
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid user id")

@@ -30,6 +30,7 @@ class Settings(BaseSettings):
     logins_collection_name: str = Field(default="logins", validation_alias="LOGINS_COLLECTION_NAME")
     sensor_data_collection_name: str = Field(default="sensor_data", validation_alias="SENSOR_DATA_COLLECTION_NAME")
     shipments_collection_name: str = Field(default="shipments", validation_alias="SHIPMENTS_COLLECTION_NAME")
+    devices_collection_name: str = Field(default="devices", validation_alias="DEVICES_COLLECTION_NAME")
     admin_email: str = Field(default="", validation_alias="ADMIN_EMAIL")
     admin_password: str = Field(default="", validation_alias="ADMIN_PASSWORD")
     admin_name: str = Field(default="System Admin", validation_alias="ADMIN_NAME")

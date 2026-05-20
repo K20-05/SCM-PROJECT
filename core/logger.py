@@ -1,7 +1,6 @@
 import json
 import logging
 from contextvars import ContextVar
-from logging.config import dictConfig
 
 request_id_var: ContextVar[str] = ContextVar("request_id", default="-")
 path_var: ContextVar[str] = ContextVar("path", default="-")
@@ -29,33 +28,14 @@ class JsonFormatter(logging.Formatter):
 
 
 def configure_logging() -> None:
-    dictConfig(
-        {
-            "version": 1,
-            "disable_existing_loggers": False,
-            "filters": {
-                "request_context": {
-                    "()": "core.logger.RequestContextFilter",
-                }
-            },
-            "formatters": {
-                "json": {
-                    "()": "core.logger.JsonFormatter",
-                }
-            },
-            "handlers": {
-                "default": {
-                    "class": "logging.StreamHandler",
-                    "formatter": "json",
-                    "filters": ["request_context"],
-                }
-            },
-            "root": {
-                "level": "INFO",
-                "handlers": ["default"],
-            },
-        }
-    )
+    root = logging.getLogger()
+    root.setLevel(logging.INFO)
+    root.handlers.clear()
+
+    handler = logging.StreamHandler()
+    handler.setFormatter(JsonFormatter())
+    handler.addFilter(RequestContextFilter())
+    root.addHandler(handler)
 
 
 def set_request_context(request_id: str, path: str) -> None:
