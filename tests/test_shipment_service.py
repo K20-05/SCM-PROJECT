@@ -53,6 +53,14 @@ class _FakeShipmentsCollection:
             return dict(patched)
         return None
 
+    async def delete_one(self, query: dict):
+        for idx, doc in enumerate(self.docs):
+            if not _matches_identity(query.get("$or", []), doc):
+                continue
+            del self.docs[idx]
+            return type("DeleteResult", (), {"deleted_count": 1})()
+        return type("DeleteResult", (), {"deleted_count": 0})()
+
 
 class _FakeDevicesCollection:
     def __init__(self, docs: list[dict]):
@@ -98,12 +106,18 @@ def _shipment_doc(tracking_id: str, *, deleted: bool = False, device_id: str | N
     return {
         "_id": ObjectId(),
         "tracking_id": tracking_id,
-        "sender": "A",
-        "receiver": "B",
-        "origin": "X",
-        "destination": "Y",
-        "weight_kg": 3.0,
-        "expected_delivery": datetime(2026, 5, 20, 10, 30, tzinfo=timezone.utc),
+        "shipment_number": "SHIP-1",
+        "container_number": "CONT-1",
+        "route_details": "X to Y",
+        "goods_type": "Medicines",
+        "device": "DEV-1",
+        "expected_delivery_date": datetime(2026, 5, 20, 10, 30, tzinfo=timezone.utc),
+        "po_number": "PO-1",
+        "delivery_number": "DEL-1",
+        "ndc_number": "NDC-1",
+        "batch_id": "BATCH-1",
+        "serial_number_of_goods": "SER-1",
+        "shipment_description": "Test shipment",
         "status": ShipmentStatus.PENDING.value,
         "owner_id": "",
         "device_id": device_id,
@@ -112,14 +126,13 @@ def _shipment_doc(tracking_id: str, *, deleted: bool = False, device_id: str | N
     }
 
 
-def test_delete_shipment_soft_delete_sets_flags(monkeypatch):
+def test_delete_shipment_hard_delete_removes_document(monkeypatch):
     shipments = _FakeShipmentsCollection([_shipment_doc("SCM-DEL00001")])
     monkeypatch.setattr(shipment_service, "get_shipments_collection", lambda: shipments)
 
     asyncio.run(shipment_service.delete_shipment("SCM-DEL00001"))
 
-    assert shipments.docs[0]["is_deleted"] is True
-    assert "deleted_at" in shipments.docs[0]
+    assert len(shipments.docs) == 0
 
 
 def test_delete_shipment_by_object_id_works(monkeypatch):
@@ -129,7 +142,7 @@ def test_delete_shipment_by_object_id_works(monkeypatch):
 
     asyncio.run(shipment_service.delete_shipment(str(doc["_id"])))
 
-    assert shipments.docs[0]["is_deleted"] is True
+    assert len(shipments.docs) == 0
 
 
 def test_update_shipment_without_payload_returns_400():

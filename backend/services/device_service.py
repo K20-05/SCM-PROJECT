@@ -11,7 +11,11 @@ from backend.models.device_model import DeviceCreate, DeviceOut, DeviceUpdate
 def _to_device_out(document: dict) -> DeviceOut:
     return DeviceOut(
         device_id=document["device_id"],
-        name=document["name"],
+        battery_level=float(document["battery_level"]),
+        first_sensor_temperature=document["first_sensor_temperature"],
+        route_from=document["route_from"],
+        route_to=document["route_to"],
+        timestamp=document["timestamp"],
         status=document["status"],
         created_at=document["created_at"],
     )
@@ -20,7 +24,11 @@ def _to_device_out(document: dict) -> DeviceOut:
 async def create_device(payload: DeviceCreate) -> DeviceOut:
     document = {
         "device_id": payload.device_id.strip(),
-        "name": payload.name.strip(),
+        "battery_level": payload.battery_level,
+        "first_sensor_temperature": payload.first_sensor_temperature.strip(),
+        "route_from": payload.route_from.strip(),
+        "route_to": payload.route_to.strip(),
+        "timestamp": payload.timestamp,
         "status": payload.status.value,
         "created_at": datetime.now(timezone.utc),
         "updated_at": datetime.now(timezone.utc),
@@ -53,8 +61,12 @@ async def update_device(device_id: str, payload: DeviceUpdate) -> DeviceOut:
     if not update_data:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="No fields provided for update")
 
-    if "name" in update_data and update_data["name"] is not None:
-        update_data["name"] = update_data["name"].strip()
+    if "first_sensor_temperature" in update_data and update_data["first_sensor_temperature"] is not None:
+        update_data["first_sensor_temperature"] = update_data["first_sensor_temperature"].strip()
+    if "route_from" in update_data and update_data["route_from"] is not None:
+        update_data["route_from"] = update_data["route_from"].strip()
+    if "route_to" in update_data and update_data["route_to"] is not None:
+        update_data["route_to"] = update_data["route_to"].strip()
     if "status" in update_data and update_data["status"] is not None:
         update_data["status"] = update_data["status"].value
 
@@ -71,11 +83,6 @@ async def update_device(device_id: str, payload: DeviceUpdate) -> DeviceOut:
 
 
 async def delete_device(device_id: str) -> None:
-    deleted = await get_devices_collection().find_one_and_update(
-        {"device_id": device_id.strip(), "is_deleted": {"$ne": True}},
-        {"$set": {"is_deleted": True, "deleted_at": datetime.now(timezone.utc), "updated_at": datetime.now(timezone.utc)}},
-        return_document=ReturnDocument.AFTER,
-        projection={"device_id": 1},
-    )
-    if not deleted:
+    result = await get_devices_collection().delete_one({"device_id": device_id.strip(), "is_deleted": {"$ne": True}})
+    if result.deleted_count == 0:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Device not found")

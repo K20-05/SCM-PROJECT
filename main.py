@@ -14,6 +14,7 @@ from backend.database.mongo import (
     get_db,
 )
 from backend.routes.auth.admin_auth_routes import router as admin_auth_router
+from backend.routes.auth.user_auth_routes import router as user_auth_router
 from backend.routes.device_routes import router as device_router
 from backend.routes.shipment_routes import router as shipment_router
 from backend.routes.user_routes import router as user_router
@@ -63,6 +64,7 @@ def create_app() -> FastAPI:
             clear_request_context()
 
     app.include_router(user_router)
+    app.include_router(user_auth_router)
     app.include_router(admin_auth_router)
     app.include_router(shipment_router)
     app.include_router(device_router)

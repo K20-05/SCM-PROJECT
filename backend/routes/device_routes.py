@@ -1,5 +1,6 @@
-from fastapi import APIRouter, status
+from fastapi import APIRouter, Depends, status
 
+from auth.access_control import require_role
 from backend.models.device_model import DeviceCreate, DeviceOut, DeviceUpdate
 from backend.services.device_service import (
     create_device,
@@ -34,5 +35,8 @@ async def update_device_route(device_id: str, payload: DeviceUpdate):
 
 
 @router.delete("/{device_id}", status_code=status.HTTP_204_NO_CONTENT)
-async def delete_device_route(device_id: str):
+async def delete_device_route(
+    device_id: str,
+    _current_user: dict = Depends(require_role("admin")),
+):
     return await delete_device(device_id)

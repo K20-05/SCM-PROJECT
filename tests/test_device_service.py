@@ -59,12 +59,26 @@ class _FakeDevicesCollection:
             return dict(patched)
         return None
 
+    async def delete_one(self, query: dict):
+        for idx, doc in enumerate(self.docs):
+            if doc.get("device_id") != query.get("device_id"):
+                continue
+            if query.get("is_deleted", {}).get("$ne") is True and doc.get("is_deleted") is True:
+                continue
+            del self.docs[idx]
+            return type("DeleteResult", (), {"deleted_count": 1})()
+        return type("DeleteResult", (), {"deleted_count": 0})()
+
 
 def _seed_device(fake: _FakeDevicesCollection, *, deleted: bool = False):
     fake.docs.append(
         {
             "device_id": "DEV-1",
-            "name": "Tracker 1",
+            "battery_level": 6.0,
+            "first_sensor_temperature": "19.0 C",
+            "route_from": "Mumbai, India",
+            "route_to": "Louisville, USA",
+            "timestamp": datetime(2026, 5, 20, 10, 19, tzinfo=timezone.utc),
             "status": DeviceStatus.AVAILABLE.value,
             "created_at": datetime(2026, 5, 20, tzinfo=timezone.utc),
             "updated_at": datetime(2026, 5, 20, tzinfo=timezone.utc),
@@ -82,7 +96,15 @@ def test_create_device_duplicate_returns_409(monkeypatch):
     try:
         asyncio.run(
             device_service.create_device(
-                DeviceCreate(device_id="DEV-1", name="Tracker", status=DeviceStatus.AVAILABLE),
+                DeviceCreate(
+                    device_id="DEV-1",
+                    battery_level=6.0,
+                    first_sensor_temperature="19.0 C",
+                    route_from="Mumbai, India",
+                    route_to="Louisville, USA",
+                    timestamp=datetime(2026, 5, 20, 10, 19, tzinfo=timezone.utc),
+                    status=DeviceStatus.AVAILABLE,
+                ),
             )
         )
     except HTTPException as exc:
@@ -107,15 +129,14 @@ def test_update_device_with_empty_payload_returns_400(monkeypatch):
     assert with_exception.status_code == 400
 
 
-def test_delete_device_soft_delete_sets_deleted_fields(monkeypatch):
+def test_delete_device_hard_delete_removes_document(monkeypatch):
     fake = _FakeDevicesCollection()
     _seed_device(fake)
     monkeypatch.setattr(device_service, "get_devices_collection", lambda: fake)
 
     asyncio.run(device_service.delete_device("DEV-1"))
 
-    assert fake.docs[0]["is_deleted"] is True
-    assert "deleted_at" in fake.docs[0]
+    assert len(fake.docs) == 0
 
 
 def test_list_devices_hides_soft_deleted(monkeypatch):

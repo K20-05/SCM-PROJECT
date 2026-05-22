@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException
+from fastapi.security import OAuth2PasswordRequestForm
 from pymongo.errors import DuplicateKeyError
 from datetime import datetime, timezone
 
@@ -74,6 +75,30 @@ async def login(user: UserLogin):
         "token_type": "bearer",
         "access_token": create_access_token(str(stored_user["_id"])),
         "user": get_user_data(stored_user),
+    }
+
+
+@router.post("/token")
+async def token_login(form_data: OAuth2PasswordRequestForm = Depends()):
+    stored_user = await get_user_by_email(form_data.username)
+    if not stored_user:
+        raise HTTPException(status_code=401, detail="Invalid credentials")
+
+    password_hash = stored_user.get("password_hash", "")
+    if not password_hash or not verify_password(form_data.password, password_hash):
+        raise HTTPException(status_code=401, detail="Invalid credentials")
+
+    await get_logins_collection().insert_one(
+        {
+            "email": stored_user["email"],
+            "role": stored_user.get("role", settings.default_role),
+            "logged_in_at": datetime.now(timezone.utc),
+        }
+    )
+
+    return {
+        "access_token": create_access_token(str(stored_user["_id"])),
+        "token_type": "bearer",
     }
 
 

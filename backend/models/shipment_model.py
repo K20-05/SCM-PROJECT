@@ -13,34 +13,53 @@ class ShipmentStatus(str, Enum):
 
 
 class ShipmentCreate(BaseModel):
-    sender: str = Field(min_length=1)
-    receiver: str = Field(min_length=1)
-    origin: str = Field(min_length=1)
-    destination: str = Field(min_length=1)
-    weight_kg: float = Field(gt=0)
-    expected_delivery: datetime
+    shipment_number: str = Field(min_length=1)
+    container_number: str = Field(min_length=1)
+    route_details: str = Field(min_length=1)
+    goods_type: str = Field(min_length=1)
+    device: str = Field(min_length=1)
+    expected_delivery_date: datetime
+    po_number: str = Field(min_length=1)
+    delivery_number: str = Field(min_length=1)
+    ndc_number: str = Field(min_length=1)
+    batch_id: str = Field(min_length=1)
+    serial_number_of_goods: str = Field(min_length=1)
+    shipment_description: str = Field(min_length=1)
 
 
 class ShipmentOut(BaseModel):
     tracking_id: str
-    sender: str
-    receiver: str
-    origin: str
-    destination: str
-    weight_kg: float
-    expected_delivery: datetime
+    shipment_number: str
+    container_number: str
+    route_details: str
+    goods_type: str
+    device: str
+    expected_delivery_date: datetime
+    po_number: str
+    delivery_number: str
+    ndc_number: str
+    batch_id: str
+    serial_number_of_goods: str
+    shipment_description: str
     status: ShipmentStatus
     owner_id: str
+    device_id: str | None = None
     created_at: datetime
 
 
 class ShipmentUpdate(BaseModel):
-    sender: str | None = Field(default=None, min_length=1)
-    receiver: str | None = Field(default=None, min_length=1)
-    origin: str | None = Field(default=None, min_length=1)
-    destination: str | None = Field(default=None, min_length=1)
-    weight_kg: float | None = Field(default=None, gt=0)
-    expected_delivery: datetime | None = None
+    shipment_number: str | None = Field(default=None, min_length=1)
+    container_number: str | None = Field(default=None, min_length=1)
+    route_details: str | None = Field(default=None, min_length=1)
+    goods_type: str | None = Field(default=None, min_length=1)
+    device: str | None = Field(default=None, min_length=1)
+    expected_delivery_date: datetime | None = None
+    po_number: str | None = Field(default=None, min_length=1)
+    delivery_number: str | None = Field(default=None, min_length=1)
+    ndc_number: str | None = Field(default=None, min_length=1)
+    batch_id: str | None = Field(default=None, min_length=1)
+    serial_number_of_goods: str | None = Field(default=None, min_length=1)
+    shipment_description: str | None = Field(default=None, min_length=1)
     status: ShipmentStatus | None = None
 
 

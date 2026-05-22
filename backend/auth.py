@@ -21,7 +21,7 @@ credentials_exception = HTTPException(
     detail="Could not validate credentials",
     headers={"WWW-Authenticate": "Bearer"},
 )
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/user/login")
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/user/token")
 ROLE_LEVELS = {role["name"]: role["level"] for role in load_role_seed_data()}
 
 

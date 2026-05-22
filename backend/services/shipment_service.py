@@ -26,12 +26,18 @@ def _shipment_identity_filter(identifier: str) -> dict:
 def _to_shipment_out(document: dict) -> ShipmentOut:
     return ShipmentOut(
         tracking_id=document["tracking_id"],
-        sender=document["sender"],
-        receiver=document["receiver"],
-        origin=document["origin"],
-        destination=document["destination"],
-        weight_kg=float(document["weight_kg"]),
-        expected_delivery=document["expected_delivery"],
+        shipment_number=document["shipment_number"],
+        container_number=document["container_number"],
+        route_details=document["route_details"],
+        goods_type=document["goods_type"],
+        device=document["device"],
+        expected_delivery_date=document["expected_delivery_date"],
+        po_number=document["po_number"],
+        delivery_number=document["delivery_number"],
+        ndc_number=document["ndc_number"],
+        batch_id=document["batch_id"],
+        serial_number_of_goods=document["serial_number_of_goods"],
+        shipment_description=document["shipment_description"],
         status=document["status"],
         owner_id=str(document["owner_id"]),
         device_id=document.get("device_id"),
@@ -39,19 +45,25 @@ def _to_shipment_out(document: dict) -> ShipmentOut:
     )
 
 
-async def create_shipment(payload: ShipmentCreate) -> ShipmentOut:
+async def create_shipment(payload: ShipmentCreate, owner_id: str) -> ShipmentOut:
     shipments_collection = get_shipments_collection()
     for _ in range(5):
         shipment_document = {
             "tracking_id": _generate_tracking_id(),
-            "sender": payload.sender,
-            "receiver": payload.receiver,
-            "origin": payload.origin,
-            "destination": payload.destination,
-            "weight_kg": payload.weight_kg,
-            "expected_delivery": payload.expected_delivery,
+            "shipment_number": payload.shipment_number,
+            "container_number": payload.container_number,
+            "route_details": payload.route_details,
+            "goods_type": payload.goods_type,
+            "device": payload.device,
+            "expected_delivery_date": payload.expected_delivery_date,
+            "po_number": payload.po_number,
+            "delivery_number": payload.delivery_number,
+            "ndc_number": payload.ndc_number,
+            "batch_id": payload.batch_id,
+            "serial_number_of_goods": payload.serial_number_of_goods,
+            "shipment_description": payload.shipment_description,
             "status": ShipmentStatus.PENDING.value,
-            "owner_id": "",
+            "owner_id": owner_id,
             "device_id": None,
             "created_at": datetime.now(timezone.utc),
             "updated_at": datetime.now(timezone.utc),
@@ -92,13 +104,8 @@ async def update_shipment(tracking_id: str, payload: ShipmentUpdate) -> Shipment
 
 
 async def delete_shipment(tracking_id: str) -> None:
-    deleted = await get_shipments_collection().find_one_and_update(
-        {**_shipment_identity_filter(tracking_id), "is_deleted": {"$ne": True}},
-        {"$set": {"is_deleted": True, "deleted_at": datetime.now(timezone.utc), "updated_at": datetime.now(timezone.utc)}},
-        return_document=ReturnDocument.AFTER,
-        projection={"tracking_id": 1},
-    )
-    if not deleted:
+    result = await get_shipments_collection().delete_one(_shipment_identity_filter(tracking_id))
+    if result.deleted_count == 0:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Shipment not found")
 
 
