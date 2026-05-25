@@ -27,7 +27,7 @@ class Settings(BaseSettings):
     cors_origins: str = Field(default="http://localhost:3000", validation_alias="CORS_ORIGINS")
 
     users_collection_name: str = Field(default="users", validation_alias="USERS_COLLECTION_NAME")
-    logins_collection_name: str = Field(default="logins", validation_alias="LOGINS_COLLECTION_NAME")
+    logins_collection_name: str = Field(default="login", validation_alias="LOGINS_COLLECTION_NAME")
     sensor_data_collection_name: str = Field(default="sensor_data", validation_alias="SENSOR_DATA_COLLECTION_NAME")
     shipments_collection_name: str = Field(default="shipments", validation_alias="SHIPMENTS_COLLECTION_NAME")
     admin_email: str = Field(default="", validation_alias="ADMIN_EMAIL")
