@@ -19,7 +19,7 @@ class ShipmentCreate(BaseModel):
     goods_type: str = Field(min_length=1)
     device: str = Field(min_length=1)
     expected_delivery_date: datetime
-    po_number: str = Field(min_length=1)
+    ph_number: str = Field(min_length=1)
     delivery_number: str = Field(min_length=1)
     ndc_number: str = Field(min_length=1)
     batch_id: str = Field(min_length=1)
@@ -35,7 +35,7 @@ class ShipmentOut(BaseModel):
     goods_type: str
     device: str
     expected_delivery_date: datetime
-    po_number: str
+    ph_number: str
     delivery_number: str
     ndc_number: str
     batch_id: str
@@ -54,7 +54,7 @@ class ShipmentUpdate(BaseModel):
     goods_type: str | None = Field(default=None, min_length=1)
     device: str | None = Field(default=None, min_length=1)
     expected_delivery_date: datetime | None = None
-    po_number: str | None = Field(default=None, min_length=1)
+    ph_number: str | None = Field(default=None, min_length=1)
     delivery_number: str | None = Field(default=None, min_length=1)
     ndc_number: str | None = Field(default=None, min_length=1)
     batch_id: str | None = Field(default=None, min_length=1)

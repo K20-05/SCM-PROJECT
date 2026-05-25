@@ -9,6 +9,16 @@ from backend.models.auth_models import UserRole
 
 client: AsyncIOMotorClient | None = None
 database: AgnosticDatabase | None = None
+WEAK_ADMIN_PASSWORDS = {
+    "admin",
+    "admin123",
+    "admin@123",
+    "password",
+    "password123",
+    "changeme",
+    "changeit",
+    "12345678",
+}
 
 
 async def connect_to_mongo() -> None:
@@ -126,6 +136,11 @@ async def ensure_default_admin() -> None:
 
     if not admin_email or not admin_password or not admin_phone:
         return
+    normalized_admin_password = admin_password.strip().lower()
+    if len(admin_password) < 12 or normalized_admin_password in WEAK_ADMIN_PASSWORDS:
+        raise RuntimeError(
+            "ADMIN_PASSWORD is too weak. Use at least 12 characters and avoid common/default passwords."
+        )
 
     existing_user = await users_collection.find_one({"email": admin_email})
     if existing_user:

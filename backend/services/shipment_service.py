@@ -32,7 +32,7 @@ def _to_shipment_out(document: dict) -> ShipmentOut:
         goods_type=document["goods_type"],
         device=document["device"],
         expected_delivery_date=document["expected_delivery_date"],
-        po_number=document["po_number"],
+        ph_number=document["ph_number"],
         delivery_number=document["delivery_number"],
         ndc_number=document["ndc_number"],
         batch_id=document["batch_id"],
@@ -56,7 +56,7 @@ async def create_shipment(payload: ShipmentCreate, owner_id: str) -> ShipmentOut
             "goods_type": payload.goods_type,
             "device": payload.device,
             "expected_delivery_date": payload.expected_delivery_date,
-            "po_number": payload.po_number,
+            "ph_number": payload.ph_number,
             "delivery_number": payload.delivery_number,
             "ndc_number": payload.ndc_number,
             "batch_id": payload.batch_id,
@@ -86,10 +86,22 @@ async def list_shipments() -> list[ShipmentOut]:
     return [_to_shipment_out(shipment) for shipment in shipments]
 
 
-async def update_shipment(tracking_id: str, payload: ShipmentUpdate) -> ShipmentOut:
+async def update_shipment(tracking_id: str, payload: ShipmentUpdate, current_user: dict) -> ShipmentOut:
     update_data = payload.model_dump(exclude_unset=True)
     if not update_data:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="No fields provided for update")
+
+    shipment = await get_shipments_collection().find_one(
+        {**_shipment_identity_filter(tracking_id), "is_deleted": {"$ne": True}},
+        {"_id": 0, "owner_id": 1},
+    )
+    if not shipment:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Shipment not found")
+
+    is_admin = current_user.get("role") in {"admin", "super_admin"}
+    is_owner = str(shipment.get("owner_id")) == str(current_user.get("_id"))
+    if not (is_admin or is_owner):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not authorized to update this shipment")
 
     update_data["updated_at"] = datetime.now(timezone.utc)
     updated = await get_shipments_collection().find_one_and_update(

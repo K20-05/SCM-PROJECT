@@ -26,8 +26,12 @@ async def list_shipments_route():
 
 
 @router.patch("/{tracking_id}", response_model=ShipmentOut)
-async def update_shipment_route(tracking_id: str, payload: ShipmentUpdate):
-    return await update_shipment(tracking_id, payload)
+async def update_shipment_route(
+    tracking_id: str,
+    payload: ShipmentUpdate,
+    current_user: dict = Depends(get_current_user),
+):
+    return await update_shipment(tracking_id, payload, current_user)
 
 
 @router.delete("/{tracking_id}", status_code=status.HTTP_204_NO_CONTENT)
