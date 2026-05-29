@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Dashboard | SCMXpertLite</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Hermeneus+One&family=Cormorant+Garamond:wght@600&family=Rye&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" crossorigin="anonymous" referrerpolicy="no-referrer" />
+  <link id="theme-stylesheet" rel="stylesheet" href="/css/dashboard.css" data-light-href="/css/dashboard.css" data-dark-href="/css/dashboard-dark.css">
+</head>
+<body>
+  <div class="wrap">
+    <header class="topbar">
+      <div class="brand-row">
+        <span class="brand-dot" aria-hidden="true"></span>
+        <span class="brand-name">SCMXpertLite</span>
+      </div>
+      <div class="top-actions">
+        <button type="button" id="theme-toggle" class="theme-toggle" aria-label="Toggle theme">Dark Mode</button>
+        <button type="button" id="logout-btn" class="logout-btn"><i class="fa-solid fa-right-from-bracket"></i> Logout</button>
+      </div>
+    </header>
+
+    <main class="grid">
+      <section class="card welcome">
+        <h1>Dashboard</h1>
+        <p>Welcome to SCMXpertLite....</p>
+      </section>
+    </main>
+  </div>
+
+  <script src="/javascript/theme-toggle.js"></script>
+  <script src="/javascript/dashboard.js"></script>
+</body>
+</html>

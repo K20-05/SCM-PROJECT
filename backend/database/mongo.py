@@ -69,6 +69,9 @@ def get_sensor_data_collection():
 def get_shipments_collection():
     return get_collection(settings.shipments_collection_name)
 
+def get_devices_collection():
+    return get_collection(settings.devices_collection_name)
+
 
 async def test_database_connection() -> None:
     # Ping validates that credentials, DNS, and cluster connectivity are healthy.
@@ -83,6 +86,7 @@ async def ensure_collections() -> None:
         settings.logins_collection_name,
         settings.sensor_data_collection_name,
         settings.shipments_collection_name,
+        settings.devices_collection_name,
     ]
 
     for collection_name in required_collections:
@@ -99,6 +103,7 @@ async def ensure_indexes() -> None:
     logins_collection = get_logins_collection()
     sensor_data_collection = get_sensor_data_collection()
     shipments_collection = get_shipments_collection()
+    devices_collection = get_devices_collection()
     await users_collection.create_index("email", unique=True)
     try:
         await users_collection.drop_index("phone_1")
@@ -113,6 +118,8 @@ async def ensure_indexes() -> None:
     await shipments_collection.create_index("tracking_id", unique=True)
     await shipments_collection.create_index("owner_id")
     await shipments_collection.create_index("status")
+    await devices_collection.create_index("device_id", unique=True)
+    await devices_collection.create_index("status")
 
 
 async def ensure_default_admin() -> None:

@@ -4,7 +4,8 @@ from auth.auth_deps import get_current_user
 from backend.models.auth_models import UserRole
 
 ROLE_LEVELS = {
-    UserRole.CUSTOMER.value: 10,
+    UserRole.USER.value: 10,
+    "customer": 10,
     UserRole.ADMIN.value: 50,
     UserRole.SUPER_ADMIN.value: 100,
 }
@@ -14,8 +15,8 @@ def require_role(required_role: UserRole | str):
     normalized_required_role = required_role
     if isinstance(required_role, str):
         normalized = required_role.strip().lower()
-        if normalized == "user":
-            normalized = UserRole.CUSTOMER.value
+        if normalized == "customer":
+            normalized = UserRole.USER.value
         try:
             normalized_required_role = UserRole(normalized)
         except ValueError as exc:

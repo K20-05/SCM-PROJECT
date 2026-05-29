@@ -1,0 +1,55 @@
+:root {
+  --bg: #f6f2ea;
+  --bg-accent: #e7dece;
+  --surface: #fffdf9;
+  --surface-soft: #f9f4eb;
+  --surface-elev: #fffefb;
+  --ink: #1f1a15;
+  --ink-muted: #74685c;
+  --line: #d6c8b6;
+  --line-strong: #b79f84;
+  --brand: #7b5b3e;
+  --brand-dark: #5f452f;
+  --danger: #b3261e;
+  --success: #1d7a3f;
+}
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+  font-family: "Hermeneus One", serif;
+  color: var(--ink);
+  background:
+    radial-gradient(circle at 14% 10%, rgba(255, 243, 218, 0.95) 0%, rgba(255, 243, 218, 0) 36%),
+    radial-gradient(circle at 86% 12%, rgba(236, 225, 204, 0.8) 0%, rgba(236, 225, 204, 0) 34%),
+    radial-gradient(circle at 88% 88%, rgba(229, 216, 195, 0.85) 0%, rgba(229, 216, 195, 0) 30%),
+    linear-gradient(180deg, var(--bg) 0%, #f3ece0 100%);
+}
+.auth-container { min-height: 100vh; display: flex; flex-direction: column; justify-content: center; align-items: center; padding: 14px; }
+.card { position: relative; width: 100%; max-width: 440px; background: var(--surface-elev); border: 1px solid #cdbca8; border-radius: 14px; box-shadow: 0 18px 40px rgba(49, 37, 23, 0.14); }
+.brand-row { display: flex; justify-content: center; align-items: center; gap: 8px; margin-bottom: 8px; }
+.outside-brand { margin-bottom: 8px; }
+.brand-dot { width: 9px; height: 9px; border-radius: 999px; background: linear-gradient(135deg, #b89771, #7b5b3e); }
+.brand-name { font-family: "Rye", serif; font-size: 1.08rem; letter-spacing: .8px; color: #7b5b3e; text-transform: uppercase; }
+.card-body { padding: 22px; }
+.card-title { text-align: center; font: 600 1.75rem "Cormorant Garamond", serif; letter-spacing: .4px; }
+.card-subtitle { text-align: center; margin: 6px 0 16px; color: var(--ink-muted); }
+.form-group { margin-bottom: 10px; }
+.form-group label { color: #5b4f43; font-size: .84rem; text-transform: uppercase; letter-spacing: .5px; display: block; margin-bottom: 6px; }
+.form-group label::after { content: " *"; color: var(--brand); }
+.form-control { width: 100%; padding: 10px 11px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface-soft); color: var(--ink); }
+.form-control:focus { outline: 0; border-color: var(--line-strong); box-shadow: 0 0 0 3px rgba(183, 159, 132, 0.2); }
+.password-wrap { position: relative; }
+.password-wrap .form-control { padding-right: 40px; }
+.toggle-password { position: absolute; right: 10px; top: 50%; transform: translateY(-50%); border: 0; background: transparent; color: #8f8376; cursor: pointer; }
+.field-error { min-height: 1em; font-size: .75rem; color: var(--danger); margin-top: 5px; }
+.form-control.invalid { border-color: var(--danger); }
+.btn { width: 100%; padding: 10px; border: 1px solid #6f5237; border-radius: 10px; color: #fff; background: linear-gradient(135deg, #8a6544 0%, #5f452f 100%); font-weight: 700; cursor: pointer; }
+.btn i { margin-right: 6px; }
+.btn:disabled { opacity: .6; cursor: not-allowed; }
+.signup-link { margin-top: 10px; text-align: center; color: var(--ink-muted); }
+.signup-link a { color: var(--brand-dark); }
+.message { text-align: center; margin-top: 10px; min-height: 1.2em; }
+.message.error { color: var(--danger); }
+.message.success { color: var(--success); }
+.capslock-warning { display: none; margin-top: 5px; font-size: .75rem; color: #a24d00; }
+.capslock-warning.visible { display: block; }
+.theme-toggle { position: absolute; top: -2rem; right: 0; border: 1px solid #b79f84; background: rgba(255, 253, 249, 0.9); color: #6c5037; border-radius: 999px; padding: 6px 10px; font-size: .72rem; cursor: pointer; }

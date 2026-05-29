@@ -4,6 +4,7 @@ from datetime import datetime, timezone
 
 from backend.config.app_config import settings
 from backend.database.mongo import get_logins_collection, get_users_collection
+from backend.models.auth_models import UserRole
 from backend.models.user_model import ChangePasswordRequest, UserLogin, UserSignup
 from backend.auth import (
     admin_required,
@@ -27,18 +28,21 @@ async def signup(user: UserSignup):
     if existing_user:
         raise HTTPException(status_code=400, detail="User already exists")
 
-    assigned_role = settings.default_role
+    assigned_role = UserRole.USER.value
     if not role_exists(assigned_role):
         raise HTTPException(status_code=400, detail="Invalid role")
 
+    hashed_password = generate_password_hash(user.password)
     user_document = {
         "name": user.name,
         "email": user.email,
         "phone": user.phone,
-        "password_hash": generate_password_hash(user.password),
+        "hashed_password": hashed_password,
+        "password_hash": hashed_password,
         "role": assigned_role,
         "created_at": datetime.now(timezone.utc),
         "updated_at": datetime.now(timezone.utc),
+        "is_active": True,
     }
     try:
         await get_users_collection().insert_one(user_document)
@@ -57,15 +61,18 @@ async def login(user: UserLogin):
     if not stored_user:
         raise HTTPException(status_code=401, detail="Invalid credentials")
 
-    password_hash = stored_user.get("password_hash", "")
+    password_hash = stored_user.get("hashed_password") or stored_user.get("password_hash", "")
     if not password_hash or not verify_password(user.password, password_hash):
         raise HTTPException(status_code=401, detail="Invalid credentials")
 
     await get_logins_collection().insert_one(
         {
+            "user_id": str(stored_user["_id"]),
+            "name": stored_user.get("name", ""),
             "email": stored_user["email"],
             "role": stored_user.get("role", settings.default_role),
             "logged_in_at": datetime.now(timezone.utc),
+            "login_source": "frontend",
         }
     )
 
@@ -82,14 +89,14 @@ async def change_password(
     payload: ChangePasswordRequest,
     current_user: dict = Depends(get_current_user),
 ):
-    current_hash = current_user.get("password_hash", "")
+    current_hash = current_user.get("hashed_password") or current_user.get("password_hash", "")
     if not current_hash or not verify_password(payload.old_password, current_hash):
         raise HTTPException(status_code=401, detail="Old password is incorrect")
 
     new_hash = generate_password_hash(payload.new_password)
     await get_users_collection().update_one(
         {"_id": current_user["_id"]},
-        {"$set": {"password_hash": new_hash}},
+        {"$set": {"password_hash": new_hash, "hashed_password": new_hash}},
     )
     return {"message": "Password changed successfully"}
 

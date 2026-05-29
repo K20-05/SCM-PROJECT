@@ -4,7 +4,7 @@ from pydantic import BaseModel, EmailStr, ValidationInfo, field_validator
 
 
 class UserRole(str, Enum):
-    CUSTOMER = "customer"
+    USER = "user"
     ADMIN = "admin"
     SUPER_ADMIN = "super_admin"
 
@@ -13,6 +13,12 @@ class UserCreate(BaseModel):
     name: str
     email: EmailStr
     password: str
+
+
+class UserUpdate(BaseModel):
+    name: str | None = None
+    email: EmailStr | None = None
+    phone: str | None = None
 
 
 class UserSignup(BaseModel):
@@ -35,6 +41,19 @@ class UserLogin(BaseModel):
     password: str
 
 
+class ChangePasswordRequest(BaseModel):
+    old_password: str
+    new_password: str
+    confirm_new_password: str
+
+    @field_validator("confirm_new_password")
+    @classmethod
+    def passwords_match(cls, value: str, info: ValidationInfo) -> str:
+        if "new_password" in info.data and value != info.data["new_password"]:
+            raise ValueError("New passwords do not match")
+        return value
+
+
 class UserOut(BaseModel):
     name: str
     email: EmailStr
@@ -49,6 +68,10 @@ class UserInDB(UserOut):
 
 class UserRoleUpdate(BaseModel):
     role: UserRole
+
+
+class UserStatusUpdate(BaseModel):
+    is_active: bool
 
 
 class AdminUserOut(BaseModel):
