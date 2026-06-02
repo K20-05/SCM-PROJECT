@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import date, datetime, time, timezone
 from uuid import uuid4
 
 from bson import ObjectId
@@ -9,6 +9,19 @@ from pymongo.errors import DuplicateKeyError
 from backend.database.mongo import get_devices_collection, get_shipments_collection
 from backend.models.device_model import DeviceAssignRequest, DeviceStatus
 from backend.models.shipment_model import ShipmentCreate, ShipmentOut, ShipmentStatus, ShipmentUpdate
+
+
+class ShipmentFilters:
+    def __init__(
+        self,
+        *,
+        container_number: str | None = None,
+        status: ShipmentStatus | None = None,
+        expected_delivery_date: date | None = None,
+    ):
+        self.container_number = container_number
+        self.status = status
+        self.expected_delivery_date = expected_delivery_date
 
 
 def _generate_tracking_id() -> str:
@@ -81,10 +94,24 @@ async def create_shipment(payload: ShipmentCreate, owner_id: str) -> ShipmentOut
     )
 
 
-async def list_shipments(current_user: dict | None = None) -> list[ShipmentOut]:
+async def list_shipments(
+    current_user: dict | None = None,
+    filters: ShipmentFilters | None = None,
+    *,
+    mine_only: bool = False,
+) -> list[ShipmentOut]:
     query = {"is_deleted": {"$ne": True}}
-    if current_user and current_user.get("role") not in {"admin", "super_admin"}:
+    if current_user and (mine_only or current_user.get("role") not in {"admin", "super_admin"}):
         query["owner_id"] = str(current_user["_id"])
+    if filters:
+        if filters.container_number:
+            query["container_number"] = {"$regex": filters.container_number.strip(), "$options": "i"}
+        if filters.status:
+            query["status"] = filters.status.value
+        if filters.expected_delivery_date:
+            start = datetime.combine(filters.expected_delivery_date, time.min, tzinfo=timezone.utc)
+            end = datetime.combine(filters.expected_delivery_date, time.max, tzinfo=timezone.utc)
+            query["expected_delivery_date"] = {"$gte": start, "$lte": end}
 
     shipments = await get_shipments_collection().find(query, {"_id": 0}).to_list(length=2000)
     return [_to_shipment_out(shipment) for shipment in shipments]
@@ -106,6 +133,8 @@ async def update_shipment(tracking_id: str, payload: ShipmentUpdate, current_use
     is_owner = str(shipment.get("owner_id")) == str(current_user.get("_id"))
     if not (is_admin or is_owner):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not authorized to update this shipment")
+    if "status" in update_data and not is_admin:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only admins can change shipment status")
 
     update_data["updated_at"] = datetime.now(timezone.utc)
     updated = await get_shipments_collection().find_one_and_update(

@@ -2,7 +2,7 @@ from datetime import datetime, timezone
 
 from motor.motor_asyncio import AsyncIOMotorClient
 from motor.core import AgnosticDatabase
-from pymongo.errors import CollectionInvalid
+from pymongo.errors import CollectionInvalid, DuplicateKeyError
 from auth.auth_utils import hash_password
 from backend.config.app_config import settings
 from backend.models.auth_models import UserRole
@@ -69,6 +69,7 @@ def get_sensor_data_collection():
 def get_shipments_collection():
     return get_collection(settings.shipments_collection_name)
 
+
 def get_devices_collection():
     return get_collection(settings.devices_collection_name)
 
@@ -109,7 +110,10 @@ async def ensure_indexes() -> None:
         await users_collection.drop_index("phone_1")
     except Exception:
         pass
-    await users_collection.create_index("phone")
+    try:
+        await users_collection.create_index("phone", unique=True, sparse=True)
+    except DuplicateKeyError:
+        await users_collection.create_index("phone")
     await users_collection.create_index("role")
     await logins_collection.create_index("email")
     await logins_collection.create_index("logged_in_at")
@@ -155,8 +159,12 @@ async def ensure_seed_account(
             {"_id": existing_user["_id"]},
             {
                 "$set": {
+                    "name": seed_name,
+                    "phone": seed_phone,
+                    "hashed_password": hash_password(seed_password),
                     "role": role.value,
                     "is_active": True,
+                    "is_deleted": False,
                     "updated_at": datetime.now(timezone.utc),
                 }
             },

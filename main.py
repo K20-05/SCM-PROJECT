@@ -46,7 +46,7 @@ def create_app() -> FastAPI:
     project_root = Path(__file__).resolve().parent
     frontend_dir = project_root / "frontend"
 
-    app = FastAPI(title="SCMXPertLite API", lifespan=lifespan)
+    app = FastAPI(title="SCMXpertLite API", lifespan=lifespan)
 
     app.add_middleware(
         CORSMiddleware,
@@ -115,11 +115,6 @@ def create_app() -> FastAPI:
     @app.get("/signup-dark")
     async def signup_dark_page():
         return RedirectResponse(url="/signup?theme=dark", status_code=307)
-
-    # Backward-compatible route name.
-    @app.get("/signup-dark")
-    async def signup_industrial_page():
-        return RedirectResponse(url="/signup-dark", status_code=307)
 
     @app.get("/health")
     async def health():

@@ -99,10 +99,14 @@ form.addEventListener("submit", async (event) => {
       return;
     }
 
-    localStorage.setItem("access_token", data.access_token);
-    localStorage.setItem("token_type", data.token_type || "bearer");
-    if (data.role) localStorage.setItem("user_role", data.role);
-    if (data.dashboard_url) localStorage.setItem("dashboard_url", data.dashboard_url);
+    localStorage.removeItem("access_token");
+    localStorage.removeItem("token_type");
+    localStorage.removeItem("user_role");
+    localStorage.removeItem("dashboard_url");
+    sessionStorage.setItem("access_token", data.access_token);
+    sessionStorage.setItem("token_type", data.token_type || "bearer");
+    if (data.role) sessionStorage.setItem("user_role", data.role);
+    if (data.dashboard_url) sessionStorage.setItem("dashboard_url", data.dashboard_url);
 
     setMessage("Login successful. Redirecting...", "success");
     setTimeout(() => {

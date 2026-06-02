@@ -59,7 +59,7 @@ async def refresh_access_token(current_user: dict = Depends(get_current_user)):
     return token_for_user(current_user)
 
 
-@user_crud_router.post("", status_code=status.HTTP_201_CREATED)
+@user_crud_router.post("", status_code=status.HTTP_201_CREATED, dependencies=[Depends(require_role("admin"))])
 async def create_user(payload: UserCreate):
     return await create_manual_user(payload)
 
@@ -79,12 +79,12 @@ async def update_me(payload: UserUpdate, current_user: dict = Depends(get_curren
     return await update_visible_user(str(current_user["_id"]), payload)
 
 
-@user_crud_router.put("/{user_id}", dependencies=[Depends(require_role("admin"))], include_in_schema=False)
+@user_crud_router.put("/{user_id}", dependencies=[Depends(require_role("super_admin"))], include_in_schema=False)
 async def update_user(user_id: str, payload: UserUpdate, current_user: dict = Depends(get_current_user)):
     return await update_visible_user(user_id, payload)
 
 
-@user_crud_router.delete("/{user_id}", status_code=status.HTTP_204_NO_CONTENT, dependencies=[Depends(require_role("admin"))])
+@user_crud_router.delete("/{user_id}", status_code=status.HTTP_204_NO_CONTENT, dependencies=[Depends(require_role("super_admin"))])
 async def delete_user(user_id: str):
     await delete_visible_user(user_id)
     return None

@@ -3,9 +3,10 @@ from datetime import datetime, timezone
 
 from bson import ObjectId
 from fastapi import HTTPException
+import pytest
 from pymongo.errors import DuplicateKeyError
 
-from backend.models.auth_models import UserCreate
+from backend.models.auth_models import ChangePasswordRequest, UserCreate, UserSignup
 from backend.routes.auth import user_auth_routes
 from backend.services import user_service
 
@@ -45,7 +46,7 @@ def test_create_user_duplicate_email_returns_409(monkeypatch):
     try:
         asyncio.run(
             user_auth_routes.create_user(
-                UserCreate(name="A", email="dup@example.com", password="pw"),
+                UserCreate(name="A", email="dup@example.com", phone="9876543210", password="Strong123"),
             )
         )
     except HTTPException as exc:
@@ -53,6 +54,24 @@ def test_create_user_duplicate_email_returns_409(monkeypatch):
 
     assert with_exception is not None
     assert with_exception.status_code == 409
+
+
+def test_backend_user_validation_enforces_phone_and_password_rules():
+    with pytest.raises(ValueError):
+        UserSignup(
+            name="Demo",
+            email="demo@example.com",
+            phone="123",
+            password="weak",
+            confirm_password="weak",
+        )
+
+    with pytest.raises(ValueError):
+        ChangePasswordRequest(
+            old_password="OldStrong1",
+            new_password="lowercaseonly",
+            confirm_new_password="lowercaseonly",
+        )
 
 
 def test_get_user_excludes_id_and_password(monkeypatch):

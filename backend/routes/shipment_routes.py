@@ -1,9 +1,12 @@
-from fastapi import APIRouter, Depends, status
+from datetime import date
+
+from fastapi import APIRouter, Depends, Query, status
 from auth.access_control import require_role
 from auth.auth_deps import get_current_user
 from backend.models.device_model import DeviceAssignRequest
-from backend.models.shipment_model import ShipmentCreate, ShipmentOut, ShipmentUpdate
+from backend.models.shipment_model import ShipmentCreate, ShipmentOut, ShipmentStatus, ShipmentUpdate
 from backend.services.shipment_service import (
+    ShipmentFilters,
     assign_device_to_shipment,
     create_shipment,
     delete_shipment as delete_shipment_service,
@@ -21,8 +24,19 @@ async def create_shipment_route(payload: ShipmentCreate, current_user: dict = De
 
 
 @router.get("", response_model=list[ShipmentOut])
-async def list_shipments_route(current_user: dict = Depends(get_current_user)):
-    return await list_shipments(current_user)
+async def list_shipments_route(
+    current_user: dict = Depends(get_current_user),
+    container_number: str | None = Query(default=None),
+    status_filter: ShipmentStatus | None = Query(default=None, alias="status"),
+    expected_delivery_date: date | None = Query(default=None),
+    mine: bool = Query(default=False),
+):
+    filters = ShipmentFilters(
+        container_number=container_number,
+        status=status_filter,
+        expected_delivery_date=expected_delivery_date,
+    )
+    return await list_shipments(current_user, filters, mine_only=mine)
 
 
 @router.patch("/{tracking_id}", response_model=ShipmentOut)

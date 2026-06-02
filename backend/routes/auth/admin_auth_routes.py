@@ -47,7 +47,7 @@ async def update_user_status(
 async def update_user(
     user_id: str,
     payload: UserUpdate,
-    _current_user: dict = Depends(require_role("admin")),
+    _current_user: dict = Depends(require_role("super_admin")),
 ):
     return await update_admin_user(user_id, payload)
 

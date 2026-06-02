@@ -64,6 +64,15 @@ class _FakeShipmentsCollection:
                 if doc.get(key) == expected["$ne"]:
                     return False
                 continue
+            if isinstance(expected, dict) and "$regex" in expected:
+                if expected["$regex"].lower() not in str(doc.get(key, "")).lower():
+                    return False
+                continue
+            if isinstance(expected, dict) and "$gte" in expected and "$lte" in expected:
+                value = doc.get(key)
+                if value is None or value < expected["$gte"] or value > expected["$lte"]:
+                    return False
+                continue
             if doc.get(key) != expected:
                 return False
         return True
@@ -150,6 +159,37 @@ def test_list_shipments_allows_admin_to_see_all_records(monkeypatch):
     assert fake_collection.last_find_query == {"is_deleted": {"$ne": True}}
 
 
+def test_list_shipments_mine_only_filters_admin_to_owned_records(monkeypatch):
+    fake_collection = _FakeShipmentsCollection()
+    monkeypatch.setattr(shipment_service, "get_shipments_collection", lambda: fake_collection)
+    asyncio.run(shipment_service.create_shipment(_payload(), owner_id="admin-1"))
+    asyncio.run(shipment_service.create_shipment(_payload(), owner_id="owner-2"))
+
+    shipments = asyncio.run(shipment_service.list_shipments({"_id": "admin-1", "role": "admin"}, mine_only=True))
+
+    assert len(shipments) == 1
+    assert shipments[0].owner_id == "admin-1"
+    assert fake_collection.last_find_query == {"is_deleted": {"$ne": True}, "owner_id": "admin-1"}
+
+
+def test_list_shipments_applies_filters(monkeypatch):
+    fake_collection = _FakeShipmentsCollection()
+    monkeypatch.setattr(shipment_service, "get_shipments_collection", lambda: fake_collection)
+    asyncio.run(shipment_service.create_shipment(_payload(), owner_id="owner-1"))
+    second_payload = _payload().model_copy(update={"container_number": "CONT-XYZ"})
+    asyncio.run(shipment_service.create_shipment(second_payload, owner_id="owner-1"))
+
+    shipments = asyncio.run(
+        shipment_service.list_shipments(
+            {"_id": "owner-1", "role": "user"},
+            shipment_service.ShipmentFilters(container_number="xyz", status=ShipmentStatus.PENDING),
+        )
+    )
+
+    assert len(shipments) == 1
+    assert shipments[0].container_number == "CONT-XYZ"
+
+
 def test_update_shipment_partial_sets_updated_at(monkeypatch):
     fake_collection = _FakeShipmentsCollection()
     monkeypatch.setattr(shipment_service, "get_shipments_collection", lambda: fake_collection)
@@ -158,14 +198,50 @@ def test_update_shipment_partial_sets_updated_at(monkeypatch):
     result = asyncio.run(
         shipment_service.update_shipment(
             created.tracking_id,
-            ShipmentUpdate(route_details="Chennai to Pune", status=ShipmentStatus.IN_TRANSIT),
+            ShipmentUpdate(route_details="Chennai to Pune"),
             {"_id": "owner-1", "role": "user"},
         )
     )
 
     assert result.route_details == "Chennai to Pune"
-    assert result.status == ShipmentStatus.IN_TRANSIT
     assert "updated_at" in fake_collection.inserted_docs[0]
+
+
+def test_user_cannot_update_shipment_status(monkeypatch):
+    fake_collection = _FakeShipmentsCollection()
+    monkeypatch.setattr(shipment_service, "get_shipments_collection", lambda: fake_collection)
+    created = asyncio.run(shipment_service.create_shipment(_payload(), owner_id="owner-1"))
+
+    with_exception = None
+    try:
+        asyncio.run(
+            shipment_service.update_shipment(
+                created.tracking_id,
+                ShipmentUpdate(status=ShipmentStatus.IN_TRANSIT),
+                {"_id": "owner-1", "role": "user"},
+            )
+        )
+    except HTTPException as exc:
+        with_exception = exc
+
+    assert with_exception is not None
+    assert with_exception.status_code == 403
+
+
+def test_admin_can_update_shipment_status(monkeypatch):
+    fake_collection = _FakeShipmentsCollection()
+    monkeypatch.setattr(shipment_service, "get_shipments_collection", lambda: fake_collection)
+    created = asyncio.run(shipment_service.create_shipment(_payload(), owner_id="owner-1"))
+
+    result = asyncio.run(
+        shipment_service.update_shipment(
+            created.tracking_id,
+            ShipmentUpdate(status=ShipmentStatus.IN_TRANSIT),
+            {"_id": "admin-1", "role": "admin"},
+        )
+    )
+
+    assert result.status == ShipmentStatus.IN_TRANSIT
 
 
 def test_delete_shipment_soft_delete(monkeypatch):

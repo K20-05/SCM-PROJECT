@@ -1,3 +1,8 @@
+"""Inactive legacy user models kept for reference only.
+
+Active request/response models live in backend.models.auth_models.
+"""
+
 import re
 
 from pydantic import BaseModel, ValidationInfo, field_validator

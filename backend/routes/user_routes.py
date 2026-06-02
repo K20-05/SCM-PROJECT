@@ -1,3 +1,9 @@
+"""Inactive legacy routes kept for reference only.
+
+main.py does not include this router. Use backend.routes.auth.user_auth_routes
+for active user authentication and CRUD endpoints.
+"""
+
 from fastapi import APIRouter, Depends
 
 from auth.access_control import require_role
@@ -6,7 +12,6 @@ from backend.models.auth_models import ChangePasswordRequest, UserLogin, UserSig
 from backend.services.user_service import change_user_password, login_user, signup_user
 
 
-# Kept as an inactive legacy compatibility module. main.py does not include this router.
 router = APIRouter(prefix="/user", tags=["User"])
 
 

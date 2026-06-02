@@ -35,5 +35,10 @@ async def get_current_user(token: str = Depends(oauth2_scheme)) -> dict:
     user = await get_users_collection().find_one({"_id": ObjectId(user_id)})
     if not user:
         raise credentials_exception
+    if not bool(user.get("is_active", True)) or bool(user.get("is_deleted", False)):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Account is inactive",
+        )
 
     return user
