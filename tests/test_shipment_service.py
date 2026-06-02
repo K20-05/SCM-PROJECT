@@ -126,13 +126,15 @@ def _shipment_doc(tracking_id: str, *, deleted: bool = False, device_id: str | N
     }
 
 
-def test_delete_shipment_hard_delete_removes_document(monkeypatch):
+def test_delete_shipment_soft_deletes_document(monkeypatch):
     shipments = _FakeShipmentsCollection([_shipment_doc("SCM-DEL00001")])
     monkeypatch.setattr(shipment_service, "get_shipments_collection", lambda: shipments)
 
     asyncio.run(shipment_service.delete_shipment("SCM-DEL00001"))
 
-    assert len(shipments.docs) == 0
+    assert len(shipments.docs) == 1
+    assert shipments.docs[0]["is_deleted"] is True
+    assert "deleted_at" in shipments.docs[0]
 
 
 def test_delete_shipment_by_object_id_works(monkeypatch):
@@ -142,13 +144,14 @@ def test_delete_shipment_by_object_id_works(monkeypatch):
 
     asyncio.run(shipment_service.delete_shipment(str(doc["_id"])))
 
-    assert len(shipments.docs) == 0
+    assert len(shipments.docs) == 1
+    assert shipments.docs[0]["is_deleted"] is True
 
 
 def test_update_shipment_without_payload_returns_400():
     with_exception = None
     try:
-        asyncio.run(shipment_service.update_shipment("SCM-EMPTY", ShipmentUpdate()))
+        asyncio.run(shipment_service.update_shipment("SCM-EMPTY", ShipmentUpdate(), {"_id": "owner-1", "role": "user"}))
     except HTTPException as exc:
         with_exception = exc
     assert with_exception is not None

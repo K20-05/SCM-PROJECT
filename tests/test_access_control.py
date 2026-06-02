@@ -11,7 +11,7 @@ def test_require_role_blocks_customer_from_admin_endpoints():
     dependency = require_role("admin")
 
     with pytest.raises(HTTPException) as exc_info:
-        asyncio.run(dependency({"role": UserRole.CUSTOMER.value}))
+        asyncio.run(dependency({"role": "customer"}))
 
     assert exc_info.value.status_code == status.HTTP_403_FORBIDDEN
     assert exc_info.value.detail == "Insufficient permissions"
@@ -25,18 +25,19 @@ def test_require_role_allows_admin_access():
     assert result["role"] == UserRole.ADMIN.value
 
 
-def test_require_role_blocks_admin_from_super_admin_endpoints():
-    dependency = require_role("super_admin")
+def test_require_role_blocks_user_from_admin_dashboard():
+    dependency = require_role("admin")
 
     with pytest.raises(HTTPException) as exc_info:
-        asyncio.run(dependency({"role": UserRole.ADMIN.value}))
+        asyncio.run(dependency({"role": UserRole.USER.value, "email": "user@example.com"}))
 
     assert exc_info.value.status_code == status.HTTP_403_FORBIDDEN
 
 
-def test_require_role_allows_super_admin_for_admin_level():
-    dependency = require_role("admin")
+def test_require_role_blocks_admin_from_super_admin_actions():
+    dependency = require_role("super_admin")
 
-    result = asyncio.run(dependency({"role": UserRole.SUPER_ADMIN.value, "email": "sa@example.com"}))
+    with pytest.raises(HTTPException) as exc_info:
+        asyncio.run(dependency({"role": UserRole.ADMIN.value, "email": "admin@example.com"}))
 
-    assert result["role"] == UserRole.SUPER_ADMIN.value
+    assert exc_info.value.status_code == status.HTTP_403_FORBIDDEN

@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Dashboard | SCMXpertLite</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Hermeneus+One&family=Cormorant+Garamond:wght@600&family=Rye&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" crossorigin="anonymous" referrerpolicy="no-referrer" />
+  <link id="theme-stylesheet" rel="stylesheet" href="/css/dashboard.css" data-light-href="/css/dashboard.css" data-dark-href="/css/dashboard-dark.css">
+</head>
+<body>
+  <div class="wrap">
+    <header class="topbar">
+      <div class="brand-row">
+        <button type="button" id="nav-toggle" class="nav-toggle" aria-label="Toggle navigation"><i class="fa-solid fa-bars"></i></button>
+        <button type="button" id="brand-home" class="brand-home" aria-label="Go to dashboard home">
+          <span class="brand-dot" aria-hidden="true"></span>
+          <span class="brand-name">SCMXpertLite</span>
+        </button>
+      </div>
+      <div class="top-actions">
+        <button type="button" id="theme-toggle" class="theme-toggle" aria-label="Toggle theme">Dark Mode</button>
+        <button type="button" id="logout-btn" class="logout-btn"><i class="fa-solid fa-right-from-bracket"></i> Logout</button>
+      </div>
+    </header>
+
+    <div class="dashboard-layout">
+      <aside class="side-nav" id="side-nav" aria-label="Dashboard navigation">
+        <button type="button" class="nav-link active" data-section="overview"><i class="fa-solid fa-house"></i><span>Dashboard</span></button>
+        <button type="button" class="nav-link user-only admin-only super-admin-only" data-section="profile"><i class="fa-solid fa-user"></i><span>Profile</span></button>
+        <button type="button" class="nav-link user-only" data-section="shipments"><i class="fa-solid fa-boxes-stacked"></i><span>My Shipments</span></button>
+        <button type="button" class="nav-link user-only" data-section="new-shipment"><i class="fa-solid fa-circle-plus"></i><span>New Shipment</span></button>
+        <button type="button" class="nav-link user-only" data-section="security"><i class="fa-solid fa-lock"></i><span>Security</span></button>
+        <button type="button" class="nav-link admin-only super-admin-only" data-section="operations"><i class="fa-solid fa-box-archive"></i><span>Operations</span></button>
+        <button type="button" class="nav-link admin-only super-admin-only" data-section="devices"><i class="fa-solid fa-microchip"></i><span>Devices</span></button>
+        <button type="button" class="nav-link super-admin-only" data-section="governance"><i class="fa-solid fa-users-gear"></i><span>Role Governance</span></button>
+        <button type="button" class="nav-link super-admin-only" data-section="health"><i class="fa-solid fa-shield-halved"></i><span>System Health</span></button>
+        <button type="button" class="nav-link logout-link" id="sidebar-logout-btn"><i class="fa-solid fa-right-from-bracket"></i><span>Logout</span></button>
+      </aside>
+
+      <main class="grid content-wrapper loading" id="content-wrapper">
+        <section class="card welcome">
+          <h1>Dashboard</h1>
+          <p>Verifying your role...</p>
+        </section>
+      </main>
+    </div>
+  </div>
+
+  <script src="/javascript/theme-toggle.js"></script>
+  <script src="/javascript/dashboard.js?v=user-dashboard-20260602-3"></script>
+</body>
+</html>

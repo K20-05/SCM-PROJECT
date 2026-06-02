@@ -129,14 +129,16 @@ def test_update_device_with_empty_payload_returns_400(monkeypatch):
     assert with_exception.status_code == 400
 
 
-def test_delete_device_hard_delete_removes_document(monkeypatch):
+def test_delete_device_soft_deletes_document(monkeypatch):
     fake = _FakeDevicesCollection()
     _seed_device(fake)
     monkeypatch.setattr(device_service, "get_devices_collection", lambda: fake)
 
     asyncio.run(device_service.delete_device("DEV-1"))
 
-    assert len(fake.docs) == 0
+    assert len(fake.docs) == 1
+    assert fake.docs[0]["is_deleted"] is True
+    assert "deleted_at" in fake.docs[0]
 
 
 def test_list_devices_hides_soft_deleted(monkeypatch):

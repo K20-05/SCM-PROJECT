@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Sign Up | SCMXpertLite</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Hermeneus+One&family=Cormorant+Garamond:wght@600&family=Rye&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" crossorigin="anonymous" referrerpolicy="no-referrer" />
+  <link id="theme-stylesheet" rel="stylesheet" href="/css/signup.css" data-light-href="/css/signup.css" data-dark-href="/css/signup-dark.css">
+</head>
+
+<body>
+  <div class="auth-container">
+    <div class="brand-row outside-brand">
+      <span class="brand-dot" aria-hidden="true"></span>
+      <span class="brand-name">SCMXpertLite</span>
+    </div>
+    <div class="card">
+      <button type="button" id="theme-toggle" class="theme-toggle" aria-label="Toggle theme">Dark Mode</button>
+      <div class="card-body">
+        <h2 class="card-title">Create Account</h2>
+        <p class="card-subtitle">Create your SCMXpertLite workspace access.</p>
+
+        <form id="signupForm" novalidate>
+          <div class="form-group">
+            <label for="name">FULL NAME</label>
+            <input type="text" id="name" class="form-control" placeholder="Your name" autocomplete="name" maxlength="80" aria-describedby="name-error" required />
+            <p id="name-error" class="field-error"></p>
+          </div>
+          <div class="form-group">
+            <label for="email">EMAIL</label>
+            <input type="email" id="email" class="form-control" placeholder="you@example.com" autocomplete="email" maxlength="120" aria-describedby="email-error" required />
+            <p id="email-error" class="field-error"></p>
+          </div>
+          <div class="form-group">
+            <label for="phone">PHONE</label>
+            <input type="tel" id="phone" class="form-control" inputmode="numeric" autocomplete="tel-national" maxlength="10" pattern="[0-9]{10}" placeholder="10-digit number" aria-describedby="phone-error" required />
+            <p id="phone-error" class="field-error"></p>
+          </div>
+          <div class="form-group">
+            <label for="password">PASSWORD</label>
+            <div class="password-wrap">
+              <input type="password" id="password" class="form-control" placeholder="Create a password" autocomplete="new-password" minlength="8" aria-describedby="password-error" required />
+              <button type="button" class="toggle-password" data-target="password" aria-label="Show password">
+                <i class="fa-regular fa-eye"></i>
+              </button>
+            </div>
+            <p id="password-caps-warning" class="capslock-warning" aria-live="polite">Caps Lock is ON</p>
+            <div id="password-hints" class="password-hints">
+              <div class="strength-meter" aria-hidden="true">
+                <div id="strength-bar" class="strength-bar"></div>
+              </div>
+              <p id="strength-text" class="strength-text">Strength: Too weak</p>
+              <ul class="password-rules">
+                <li id="rule-length">At least 8 characters</li>
+                <li id="rule-upper">One uppercase letter</li>
+                <li id="rule-lower">One lowercase letter</li>
+                <li id="rule-number">One number</li>
+              </ul>
+            </div>
+            <p id="password-error" class="field-error"></p>
+          </div>
+          <div class="form-group">
+            <label for="confirmPassword">CONFIRM PASSWORD</label>
+            <div class="password-wrap">
+              <input type="password" id="confirmPassword" class="form-control" placeholder="Confirm your password" autocomplete="new-password" minlength="8" aria-describedby="confirmPassword-error" required />
+              <button type="button" class="toggle-password" data-target="confirmPassword" aria-label="Show password">
+                <i class="fa-regular fa-eye"></i>
+              </button>
+            </div>
+            <p id="confirm-caps-warning" class="capslock-warning" aria-live="polite">Caps Lock is ON</p>
+            <p id="confirmPassword-error" class="field-error"></p>
+          </div>
+
+          <button id="submit-btn" type="submit" class="btn btn-primary" disabled>
+            <i id="submit-icon" class="fa-solid fa-user-plus"></i>
+            <span id="submit-text">Sign Up</span>
+          </button>
+        </form>
+
+        <p class="login-link">
+          Already have an account? <a href="/login">Log in</a>
+        </p>
+
+        <div id="msg" class="message" aria-live="polite"></div>
+        <div id="success-panel" class="success-panel" aria-live="polite"></div>
+      </div>
+    </div>
+  </div>
+  <script src="/javascript/theme-toggle.js"></script>
+  <script src="/javascript/signup.js"></script>
+</body>
+
+</html>

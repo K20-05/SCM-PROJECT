@@ -1,10 +1,13 @@
 from contextlib import asynccontextmanager
 import logging
 import os
+from pathlib import Path
 from uuid import uuid4
 
 from fastapi import Depends, FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse, RedirectResponse
+from fastapi.staticfiles import StaticFiles
 import uvicorn
 
 from backend.config.app_config import Settings, get_settings
@@ -14,10 +17,10 @@ from backend.database.mongo import (
     get_db,
 )
 from backend.routes.auth.admin_auth_routes import router as admin_auth_router
-from backend.routes.auth.user_auth_routes import router as user_auth_router
+from backend.routes.auth.user_auth_routes import router as user_auth_router, user_crud_router
+from backend.routes.dashboard_routes import router as dashboard_router
 from backend.routes.device_routes import router as device_router
 from backend.routes.shipment_routes import router as shipment_router
-from backend.routes.user_routes import router as user_router
 from core.logger import clear_request_context, configure_logging, set_request_context
 
 configure_logging()
@@ -40,6 +43,8 @@ async def lifespan(app: FastAPI):
 def create_app() -> FastAPI:
     settings = get_settings()
     cors_origins = [origin.strip() for origin in settings.cors_origins.split(",") if origin.strip()]
+    project_root = Path(__file__).resolve().parent
+    frontend_dir = project_root / "frontend"
 
     app = FastAPI(title="SCMXPertLite API", lifespan=lifespan)
 
@@ -63,23 +68,58 @@ def create_app() -> FastAPI:
         finally:
             clear_request_context()
 
-    app.include_router(user_router)
     app.include_router(user_auth_router)
+    app.include_router(user_crud_router)
     app.include_router(admin_auth_router)
-    app.include_router(shipment_router)
+    app.include_router(dashboard_router)
     app.include_router(device_router)
+    app.include_router(shipment_router)
+
+    app.mount("/css", StaticFiles(directory=frontend_dir / "css"), name="css")
+    app.mount("/javascript", StaticFiles(directory=frontend_dir / "javascript"), name="javascript")
+
+    def frontend_page(filename: str) -> FileResponse:
+        return FileResponse(
+            frontend_dir / "html_files" / filename,
+            headers={"Cache-Control": "no-store"},
+        )
 
     @app.get("/")
     async def home():
-        return {
-            "message": "SCMXPertLite API is running",
-            "endpoints": {
-                "signup": "POST /user/signup",
-                "login": "POST /user/login",
-                "health": "GET /health",
-                "docs": "/docs",
-            },
-        }
+        return RedirectResponse(url="/signup", status_code=307)
+
+    @app.get("/signup")
+    async def signup_page():
+        return frontend_page("signup.html")
+
+    @app.get("/login")
+    async def login_page():
+        return frontend_page("login.html")
+
+    @app.get("/dashboard")
+    async def dashboard_page():
+        return frontend_page("dashboard.html")
+
+    @app.get("/dashboard/user")
+    async def user_dashboard_page():
+        return frontend_page("dashboard.html")
+
+    @app.get("/dashboard/admin")
+    async def admin_dashboard_page():
+        return frontend_page("dashboard.html")
+
+    @app.get("/dashboard/super-admin")
+    async def super_admin_dashboard_page():
+        return frontend_page("dashboard.html")
+
+    @app.get("/signup-dark")
+    async def signup_dark_page():
+        return RedirectResponse(url="/signup?theme=dark", status_code=307)
+
+    # Backward-compatible route name.
+    @app.get("/signup-dark")
+    async def signup_industrial_page():
+        return RedirectResponse(url="/signup-dark", status_code=307)
 
     @app.get("/health")
     async def health():

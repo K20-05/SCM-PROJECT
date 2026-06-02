@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, status
 from auth.access_control import require_role
-from backend.auth import get_current_user
+from auth.auth_deps import get_current_user
 from backend.models.device_model import DeviceAssignRequest
 from backend.models.shipment_model import ShipmentCreate, ShipmentOut, ShipmentUpdate
 from backend.services.shipment_service import (
@@ -21,8 +21,8 @@ async def create_shipment_route(payload: ShipmentCreate, current_user: dict = De
 
 
 @router.get("", response_model=list[ShipmentOut])
-async def list_shipments_route():
-    return await list_shipments()
+async def list_shipments_route(current_user: dict = Depends(get_current_user)):
+    return await list_shipments(current_user)
 
 
 @router.patch("/{tracking_id}", response_model=ShipmentOut)
@@ -43,5 +43,9 @@ async def delete_shipment_route(
 
 
 @router.post("/{tracking_id}/assign-device", response_model=ShipmentOut)
-async def assign_device_to_shipment_route(tracking_id: str, payload: DeviceAssignRequest):
+async def assign_device_to_shipment_route(
+    tracking_id: str,
+    payload: DeviceAssignRequest,
+    _current_user: dict = Depends(require_role("admin")),
+):
     return await assign_device_to_shipment(tracking_id, payload)

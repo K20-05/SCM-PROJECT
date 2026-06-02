@@ -35,6 +35,10 @@ class Settings(BaseSettings):
     admin_password: str = Field(default="", validation_alias="ADMIN_PASSWORD")
     admin_name: str = Field(default="System Admin", validation_alias="ADMIN_NAME")
     admin_phone: str = Field(default="", validation_alias="ADMIN_PHONE")
+    super_admin_email: str = Field(default="", validation_alias="SUPER_ADMIN_EMAIL")
+    super_admin_password: str = Field(default="", validation_alias="SUPER_ADMIN_PASSWORD")
+    super_admin_name: str = Field(default="Super Admin", validation_alias="SUPER_ADMIN_NAME")
+    super_admin_phone: str = Field(default="", validation_alias="SUPER_ADMIN_PHONE")
     default_roles_json: str = Field(default="", validation_alias="DEFAULT_ROLES_JSON")
 
 
@@ -73,3 +77,4 @@ def load_role_seed_data() -> list[dict]:
         normalized_roles.append({"name": name, "level": level})
 
     return normalized_roles
+
