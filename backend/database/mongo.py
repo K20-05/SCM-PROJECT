@@ -122,33 +122,40 @@ async def ensure_indexes() -> None:
     await devices_collection.create_index("status")
 
 
-async def ensure_default_admin() -> None:
-    users_collection = get_users_collection()
-
-    existing_admin = await users_collection.find_one({"role": UserRole.ADMIN.value})
-    if existing_admin:
-        return
-
-    admin_email = settings.admin_email.strip()
-    admin_password = settings.admin_password
-    admin_phone = settings.admin_phone.strip()
-    admin_name = settings.admin_name.strip() or "System Admin"
-
-    if not admin_email or not admin_password or not admin_phone:
-        return
-    normalized_admin_password = admin_password.strip().lower()
-    if len(admin_password) < 12 or normalized_admin_password in WEAK_ADMIN_PASSWORDS:
+def _validate_seed_password(password: str, env_name: str) -> None:
+    normalized_password = password.strip().lower()
+    if len(password) < 12 or normalized_password in WEAK_ADMIN_PASSWORDS:
         raise RuntimeError(
-            "ADMIN_PASSWORD is too weak. Use at least 12 characters and avoid common/default passwords."
+            f"{env_name} is too weak. Use at least 12 characters and avoid common/default passwords."
         )
 
-    existing_user = await users_collection.find_one({"email": admin_email})
+
+async def ensure_seed_account(
+    *,
+    email: str,
+    password: str,
+    phone: str,
+    name: str,
+    role: UserRole,
+    password_env_name: str,
+) -> None:
+    seed_email = email.strip()
+    seed_password = password
+    seed_phone = phone.strip()
+    seed_name = name.strip() or role.value.replace("_", " ").title()
+
+    if not seed_email or not seed_password or not seed_phone:
+        return
+
+    _validate_seed_password(seed_password, password_env_name)
+    users_collection = get_users_collection()
+    existing_user = await users_collection.find_one({"email": seed_email})
     if existing_user:
         await users_collection.update_one(
             {"_id": existing_user["_id"]},
             {
                 "$set": {
-                    "role": UserRole.ADMIN.value,
+                    "role": role.value,
                     "is_active": True,
                     "updated_at": datetime.now(timezone.utc),
                 }
@@ -158,11 +165,11 @@ async def ensure_default_admin() -> None:
 
     await users_collection.insert_one(
         {
-            "name": admin_name,
-            "email": admin_email,
-            "phone": admin_phone,
-            "hashed_password": hash_password(admin_password),
-            "role": UserRole.ADMIN.value,
+            "name": seed_name,
+            "email": seed_email,
+            "phone": seed_phone,
+            "hashed_password": hash_password(seed_password),
+            "role": role.value,
             "created_at": datetime.now(timezone.utc),
             "updated_at": datetime.now(timezone.utc),
             "is_active": True,
@@ -170,8 +177,27 @@ async def ensure_default_admin() -> None:
     )
 
 
+async def ensure_default_accounts() -> None:
+    await ensure_seed_account(
+        email=settings.admin_email,
+        password=settings.admin_password,
+        phone=settings.admin_phone,
+        name=settings.admin_name,
+        role=UserRole.ADMIN,
+        password_env_name="ADMIN_PASSWORD",
+    )
+    await ensure_seed_account(
+        email=settings.super_admin_email,
+        password=settings.super_admin_password,
+        phone=settings.super_admin_phone,
+        name=settings.super_admin_name,
+        role=UserRole.SUPER_ADMIN,
+        password_env_name="SUPER_ADMIN_PASSWORD",
+    )
+
+
 async def ensure_database_setup() -> None:
     await connect_to_mongo()
     await ensure_collections()
     await ensure_indexes()
-    await ensure_default_admin()
+    await ensure_default_accounts()

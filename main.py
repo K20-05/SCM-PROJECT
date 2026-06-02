@@ -18,9 +18,9 @@ from backend.database.mongo import (
 )
 from backend.routes.auth.admin_auth_routes import router as admin_auth_router
 from backend.routes.auth.user_auth_routes import router as user_auth_router, user_crud_router
+from backend.routes.dashboard_routes import router as dashboard_router
 from backend.routes.device_routes import router as device_router
 from backend.routes.shipment_routes import router as shipment_router
-from backend.routes.user_routes import router as user_router
 from core.logger import clear_request_context, configure_logging, set_request_context
 
 configure_logging()
@@ -68,17 +68,21 @@ def create_app() -> FastAPI:
         finally:
             clear_request_context()
 
-    # Legacy /user routes remain active for backward compatibility but are hidden
-    # from Swagger; prefer /api/auth endpoints.
-    app.include_router(user_router, include_in_schema=False)
     app.include_router(user_auth_router)
     app.include_router(user_crud_router)
     app.include_router(admin_auth_router)
+    app.include_router(dashboard_router)
     app.include_router(device_router)
     app.include_router(shipment_router)
 
     app.mount("/css", StaticFiles(directory=frontend_dir / "css"), name="css")
     app.mount("/javascript", StaticFiles(directory=frontend_dir / "javascript"), name="javascript")
+
+    def frontend_page(filename: str) -> FileResponse:
+        return FileResponse(
+            frontend_dir / "html_files" / filename,
+            headers={"Cache-Control": "no-store"},
+        )
 
     @app.get("/")
     async def home():
@@ -86,15 +90,27 @@ def create_app() -> FastAPI:
 
     @app.get("/signup")
     async def signup_page():
-        return FileResponse(frontend_dir / "html_files" / "signup.html")
+        return frontend_page("signup.html")
 
     @app.get("/login")
     async def login_page():
-        return FileResponse(frontend_dir / "html_files" / "login.html")
+        return frontend_page("login.html")
 
     @app.get("/dashboard")
     async def dashboard_page():
-        return FileResponse(frontend_dir / "html_files" / "dashboard.html")
+        return frontend_page("dashboard.html")
+
+    @app.get("/dashboard/user")
+    async def user_dashboard_page():
+        return frontend_page("dashboard.html")
+
+    @app.get("/dashboard/admin")
+    async def admin_dashboard_page():
+        return frontend_page("dashboard.html")
+
+    @app.get("/dashboard/super-admin")
+    async def super_admin_dashboard_page():
+        return frontend_page("dashboard.html")
 
     @app.get("/signup-dark")
     async def signup_dark_page():

@@ -94,13 +94,19 @@ form.addEventListener("submit", async (event) => {
       return;
     }
 
-    if (data?.access_token) {
-      localStorage.setItem("access_token", data.access_token);
-      localStorage.setItem("token_type", data.token_type || "bearer");
+    if (!data?.access_token) {
+      setMessage("Login succeeded but no session token was returned.", "error");
+      return;
     }
+
+    localStorage.setItem("access_token", data.access_token);
+    localStorage.setItem("token_type", data.token_type || "bearer");
+    if (data.role) localStorage.setItem("user_role", data.role);
+    if (data.dashboard_url) localStorage.setItem("dashboard_url", data.dashboard_url);
+
     setMessage("Login successful. Redirecting...", "success");
     setTimeout(() => {
-      window.location.href = "/dashboard";
+      window.location.href = data?.dashboard_url || "/dashboard";
     }, 700);
   } catch (error) {
     setMessage("Cannot reach server. Check backend is running on port 8000.", "error");

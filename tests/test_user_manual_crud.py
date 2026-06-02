@@ -7,6 +7,7 @@ from pymongo.errors import DuplicateKeyError
 
 from backend.models.auth_models import UserCreate
 from backend.routes.auth import user_auth_routes
+from backend.services import user_service
 
 
 class _FakeUsersCollection:
@@ -38,7 +39,7 @@ class _FakeUsersCollection:
 def test_create_user_duplicate_email_returns_409(monkeypatch):
     fake = _FakeUsersCollection()
     fake.by_email["dup@example.com"] = {"_id": ObjectId(), "email": "dup@example.com"}
-    monkeypatch.setattr(user_auth_routes, "get_users_collection", lambda: fake)
+    monkeypatch.setattr(user_service, "get_users_collection", lambda: fake)
 
     with_exception = None
     try:
@@ -64,9 +65,9 @@ def test_get_user_excludes_id_and_password(monkeypatch):
         "password": "plain-text",
         "created_at": datetime.now(timezone.utc),
     }
-    monkeypatch.setattr(user_auth_routes, "get_users_collection", lambda: fake)
+    monkeypatch.setattr(user_service, "get_users_collection", lambda: fake)
 
-    result = asyncio.run(user_auth_routes.get_user(str(user_id)))
+    result = asyncio.run(user_auth_routes.get_user(str(user_id), current_user={"_id": user_id, "role": "user"}))
 
     assert "_id" not in result
     assert "password" not in result

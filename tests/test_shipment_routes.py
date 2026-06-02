@@ -1,12 +1,11 @@
 import asyncio
 from datetime import datetime, timezone
 
-from bson import ObjectId
 from fastapi import HTTPException
 from pymongo.errors import DuplicateKeyError
 
 from backend.models.shipment_model import ShipmentCreate, ShipmentStatus, ShipmentUpdate
-from backend.routes import shipment_routes
+from backend.services import shipment_service
 
 
 class _FakeShipmentsCollection:
@@ -21,174 +20,160 @@ class _FakeShipmentsCollection:
         if self.fail_once and self.calls == 1:
             raise DuplicateKeyError("duplicate tracking id")
         self.inserted_docs.append(document)
-        return {"inserted_id": ObjectId()}
 
     def find(self, query: dict, _projection: dict):
         self.last_find_query = query
+        collection = self
+
         class _Cursor:
             def __init__(self, docs: list[dict]):
                 self.docs = docs
 
             async def to_list(self, length: int):
-                return [doc for doc in self.docs if doc.get("is_deleted") is not True][:length]
+                return [doc for doc in self.docs if collection._matches(doc, query)][:length]
 
         return _Cursor(self.inserted_docs)
 
+    async def find_one(self, query: dict, projection: dict | None = None):
+        for doc in self.inserted_docs:
+            if not self._matches(doc, query):
+                continue
+            if projection:
+                return {key: doc[key] for key, include in projection.items() if include and key in doc}
+            return dict(doc)
+        return None
+
     async def find_one_and_update(self, query: dict, update: dict, return_document=None, projection: dict | None = None):
         for index, doc in enumerate(self.inserted_docs):
-            if doc.get("tracking_id") != query.get("tracking_id"):
-                continue
-            if query.get("is_deleted", {}).get("$ne") is True and doc.get("is_deleted") is True:
+            if not self._matches(doc, query):
                 continue
             patched = {**doc, **update.get("$set", {})}
             self.inserted_docs[index] = patched
-            if projection:
-                if projection == {"_id": 0}:
-                    return dict(patched)
-                result = {}
-                for key, include in projection.items():
-                    if key == "_id":
-                        continue
-                    if include and key in patched:
-                        result[key] = patched[key]
-                return result
+            if projection == {"_id": 0}:
+                return dict(patched)
             return patched
         return None
+
+    def _matches(self, doc: dict, query: dict) -> bool:
+        for key, expected in query.items():
+            if key == "$or":
+                if not any(self._matches(doc, predicate) for predicate in expected):
+                    return False
+                continue
+            if isinstance(expected, dict) and "$ne" in expected:
+                if doc.get(key) == expected["$ne"]:
+                    return False
+                continue
+            if doc.get(key) != expected:
+                return False
+        return True
+
+
+def _payload() -> ShipmentCreate:
+    return ShipmentCreate(
+        shipment_number="SHIP-001",
+        container_number="CONT-001",
+        route_details="Chennai to Bangalore",
+        goods_type="Electronics",
+        device="Thermal tracker",
+        expected_delivery_date=datetime(2026, 5, 20, 10, 30, tzinfo=timezone.utc),
+        ph_number="PH-001",
+        delivery_number="DEL-001",
+        ndc_number="NDC-001",
+        batch_id="BATCH-001",
+        serial_number_of_goods="SER-001",
+        shipment_description="Temperature monitored shipment",
+    )
 
 
 def test_create_shipment_sets_server_owned_fields(monkeypatch):
     fake_collection = _FakeShipmentsCollection()
-    monkeypatch.setattr(shipment_routes, "get_shipments_collection", lambda: fake_collection)
-    monkeypatch.setattr(shipment_routes, "_generate_tracking_id", lambda: "SCM-ABC12345")
+    monkeypatch.setattr(shipment_service, "get_shipments_collection", lambda: fake_collection)
+    monkeypatch.setattr(shipment_service, "_generate_tracking_id", lambda: "SCM-ABC12345")
 
-    payload = ShipmentCreate(
-        sender="Alice",
-        receiver="Bob",
-        origin="Chennai",
-        destination="Bangalore",
-        weight_kg=25.5,
-        expected_delivery=datetime(2026, 5, 20, 10, 30, tzinfo=timezone.utc),
-    )
-
-    result = asyncio.run(shipment_routes.create_shipment(payload))
+    result = asyncio.run(shipment_service.create_shipment(_payload(), owner_id="owner-1"))
 
     assert result.tracking_id == "SCM-ABC12345"
     assert result.status == ShipmentStatus.PENDING
-    assert result.owner_id == ""
-    assert fake_collection.inserted_docs[0]["status"] == ShipmentStatus.PENDING.value
+    assert result.owner_id == "owner-1"
+    assert fake_collection.inserted_docs[0]["is_deleted"] is False
 
 
 def test_create_shipment_retries_on_duplicate_tracking_id(monkeypatch):
     fake_collection = _FakeShipmentsCollection(fail_once=True)
     ids = iter(["SCM-DUPL1111", "SCM-UNIQ2222"])
-    monkeypatch.setattr(shipment_routes, "get_shipments_collection", lambda: fake_collection)
-    monkeypatch.setattr(shipment_routes, "_generate_tracking_id", lambda: next(ids))
+    monkeypatch.setattr(shipment_service, "get_shipments_collection", lambda: fake_collection)
+    monkeypatch.setattr(shipment_service, "_generate_tracking_id", lambda: next(ids))
 
-    payload = ShipmentCreate(
-        sender="Warehouse A",
-        receiver="Store B",
-        origin="Hyderabad",
-        destination="Pune",
-        weight_kg=10.0,
-        expected_delivery=datetime(2026, 5, 21, 9, 0, tzinfo=timezone.utc),
-    )
-
-    result = asyncio.run(shipment_routes.create_shipment(payload))
+    result = asyncio.run(shipment_service.create_shipment(_payload(), owner_id="owner-1"))
 
     assert fake_collection.calls == 2
     assert result.tracking_id == "SCM-UNIQ2222"
 
 
-def test_list_shipments_returns_all(monkeypatch):
+def test_list_shipments_filters_soft_deleted_records(monkeypatch):
     fake_collection = _FakeShipmentsCollection()
-    fake_collection.inserted_docs = [
-        {
-            "tracking_id": "SCM-AAAA1111",
-            "sender": "A",
-            "receiver": "B",
-            "origin": "X",
-            "destination": "Y",
-            "weight_kg": 4.5,
-            "expected_delivery": datetime(2026, 5, 20, 10, 30, tzinfo=timezone.utc),
-            "status": "pending",
-            "owner_id": "",
-            "created_at": datetime(2026, 5, 14, 9, 0, tzinfo=timezone.utc),
-            "is_deleted": False,
-        },
-        {
-            "tracking_id": "SCM-DELE0001",
-            "sender": "C",
-            "receiver": "D",
-            "origin": "M",
-            "destination": "N",
-            "weight_kg": 8.0,
-            "expected_delivery": datetime(2026, 5, 21, 10, 0, tzinfo=timezone.utc),
-            "status": "cancelled",
-            "owner_id": "",
-            "created_at": datetime(2026, 5, 13, 9, 0, tzinfo=timezone.utc),
-            "is_deleted": True,
-        }
-    ]
-    monkeypatch.setattr(shipment_routes, "get_shipments_collection", lambda: fake_collection)
+    monkeypatch.setattr(shipment_service, "get_shipments_collection", lambda: fake_collection)
+    live = shipment_service.create_shipment(_payload(), owner_id="owner-1")
+    result = asyncio.run(live)
+    fake_collection.inserted_docs[0]["tracking_id"] = result.tracking_id
+    fake_collection.inserted_docs.append({**fake_collection.inserted_docs[0], "tracking_id": "SCM-DELE0001", "is_deleted": True})
 
-    result = asyncio.run(shipment_routes.list_shipments())
+    shipments = asyncio.run(shipment_service.list_shipments())
 
-    assert len(result) == 1
-    assert result[0].tracking_id == "SCM-AAAA1111"
+    assert len(shipments) == 1
+    assert fake_collection.last_find_query == {"is_deleted": {"$ne": True}}
+
+
+def test_list_shipments_filters_to_current_user_for_user_role(monkeypatch):
+    fake_collection = _FakeShipmentsCollection()
+    monkeypatch.setattr(shipment_service, "get_shipments_collection", lambda: fake_collection)
+    asyncio.run(shipment_service.create_shipment(_payload(), owner_id="owner-1"))
+    asyncio.run(shipment_service.create_shipment(_payload(), owner_id="owner-2"))
+
+    shipments = asyncio.run(shipment_service.list_shipments({"_id": "owner-1", "role": "user"}))
+
+    assert len(shipments) == 1
+    assert shipments[0].owner_id == "owner-1"
+    assert fake_collection.last_find_query == {"is_deleted": {"$ne": True}, "owner_id": "owner-1"}
+
+
+def test_list_shipments_allows_admin_to_see_all_records(monkeypatch):
+    fake_collection = _FakeShipmentsCollection()
+    monkeypatch.setattr(shipment_service, "get_shipments_collection", lambda: fake_collection)
+    asyncio.run(shipment_service.create_shipment(_payload(), owner_id="owner-1"))
+    asyncio.run(shipment_service.create_shipment(_payload(), owner_id="owner-2"))
+
+    shipments = asyncio.run(shipment_service.list_shipments({"_id": "admin-1", "role": "admin"}))
+
+    assert len(shipments) == 2
     assert fake_collection.last_find_query == {"is_deleted": {"$ne": True}}
 
 
 def test_update_shipment_partial_sets_updated_at(monkeypatch):
     fake_collection = _FakeShipmentsCollection()
-    fake_collection.inserted_docs = [
-        {
-            "tracking_id": "SCM-UPDT0001",
-            "sender": "Old Sender",
-            "receiver": "Old Receiver",
-            "origin": "X",
-            "destination": "Y",
-            "weight_kg": 5.0,
-            "expected_delivery": datetime(2026, 5, 20, 10, 30, tzinfo=timezone.utc),
-            "status": "pending",
-            "owner_id": "",
-            "created_at": datetime(2026, 5, 14, 9, 0, tzinfo=timezone.utc),
-            "is_deleted": False,
-        }
-    ]
-    monkeypatch.setattr(shipment_routes, "get_shipments_collection", lambda: fake_collection)
+    monkeypatch.setattr(shipment_service, "get_shipments_collection", lambda: fake_collection)
+    created = asyncio.run(shipment_service.create_shipment(_payload(), owner_id="owner-1"))
 
     result = asyncio.run(
-        shipment_routes.update_shipment(
-            "SCM-UPDT0001",
-            ShipmentUpdate(sender="New Sender", status=ShipmentStatus.IN_TRANSIT),
+        shipment_service.update_shipment(
+            created.tracking_id,
+            ShipmentUpdate(route_details="Chennai to Pune", status=ShipmentStatus.IN_TRANSIT),
+            {"_id": "owner-1", "role": "user"},
         )
     )
 
-    assert result.sender == "New Sender"
+    assert result.route_details == "Chennai to Pune"
     assert result.status == ShipmentStatus.IN_TRANSIT
     assert "updated_at" in fake_collection.inserted_docs[0]
 
 
 def test_delete_shipment_soft_delete(monkeypatch):
     fake_collection = _FakeShipmentsCollection()
-    fake_collection.inserted_docs = [
-        {
-            "tracking_id": "SCM-DEL00001",
-            "sender": "A",
-            "receiver": "B",
-            "origin": "X",
-            "destination": "Y",
-            "weight_kg": 3.0,
-            "expected_delivery": datetime(2026, 5, 20, 10, 30, tzinfo=timezone.utc),
-            "status": "pending",
-            "owner_id": "",
-            "created_at": datetime(2026, 5, 14, 9, 0, tzinfo=timezone.utc),
-            "is_deleted": False,
-        }
-    ]
-    monkeypatch.setattr(shipment_routes, "get_shipments_collection", lambda: fake_collection)
+    monkeypatch.setattr(shipment_service, "get_shipments_collection", lambda: fake_collection)
+    created = asyncio.run(shipment_service.create_shipment(_payload(), owner_id="owner-1"))
 
-    asyncio.run(shipment_routes.delete_shipment("SCM-DEL00001"))
+    asyncio.run(shipment_service.delete_shipment(created.tracking_id))
 
     assert fake_collection.inserted_docs[0]["is_deleted"] is True
     assert "deleted_at" in fake_collection.inserted_docs[0]
@@ -197,7 +182,7 @@ def test_delete_shipment_soft_delete(monkeypatch):
 def test_update_shipment_with_no_fields_returns_400():
     with_exception = None
     try:
-        asyncio.run(shipment_routes.update_shipment("SCM-EMPTY000", ShipmentUpdate()))
+        asyncio.run(shipment_service.update_shipment("SCM-EMPTY000", ShipmentUpdate(), {"_id": "owner-1", "role": "user"}))
     except HTTPException as exc:
         with_exception = exc
 

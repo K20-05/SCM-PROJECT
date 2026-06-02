@@ -81,8 +81,12 @@ async def create_shipment(payload: ShipmentCreate, owner_id: str) -> ShipmentOut
     )
 
 
-async def list_shipments() -> list[ShipmentOut]:
-    shipments = await get_shipments_collection().find({"is_deleted": {"$ne": True}}, {"_id": 0}).to_list(length=2000)
+async def list_shipments(current_user: dict | None = None) -> list[ShipmentOut]:
+    query = {"is_deleted": {"$ne": True}}
+    if current_user and current_user.get("role") not in {"admin", "super_admin"}:
+        query["owner_id"] = str(current_user["_id"])
+
+    shipments = await get_shipments_collection().find(query, {"_id": 0}).to_list(length=2000)
     return [_to_shipment_out(shipment) for shipment in shipments]
 
 
@@ -116,8 +120,12 @@ async def update_shipment(tracking_id: str, payload: ShipmentUpdate, current_use
 
 
 async def delete_shipment(tracking_id: str) -> None:
-    result = await get_shipments_collection().delete_one(_shipment_identity_filter(tracking_id))
-    if result.deleted_count == 0:
+    updated = await get_shipments_collection().find_one_and_update(
+        {**_shipment_identity_filter(tracking_id), "is_deleted": {"$ne": True}},
+        {"$set": {"is_deleted": True, "deleted_at": datetime.now(timezone.utc)}},
+        return_document=ReturnDocument.AFTER,
+    )
+    if not updated:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Shipment not found")
 
 

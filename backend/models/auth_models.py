@@ -86,3 +86,5 @@ class AdminUserOut(BaseModel):
 class Token(BaseModel):
     access_token: str
     token_type: str = "bearer"
+    role: UserRole | None = None
+    dashboard_url: str | None = None
