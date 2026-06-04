@@ -1,8 +1,27 @@
 import { createApiClient } from "./dashboard/api.js";
 import { normalizeRole } from "./dashboard/format.js";
-import { getStoredSession, logout, rememberDashboard } from "./dashboard/session.js";
+import { getStoredSession, logout, redirectToLogin, rememberDashboard } from "./dashboard/session.js";
 import { createUi } from "./dashboard/ui.js";
 import { createDashboardViews } from "./dashboard/views.js";
+
+window.addEventListener("pagehide", () => {
+  document.body.classList.add("auth-suspended");
+});
+
+window.addEventListener("pageshow", (event) => {
+  const navigation = performance.getEntriesByType("navigation")[0];
+  const restoredFromHistory = event.persisted || navigation?.type === "back_forward";
+  if (!restoredFromHistory) {
+    document.body.classList.remove("auth-suspended");
+    return;
+  }
+
+  logout();
+});
+
+window.addEventListener("popstate", () => {
+  logout();
+});
 
 const { token, tokenType } = getStoredSession();
 const grid = document.querySelector(".grid");
@@ -13,7 +32,7 @@ const sideNav = document.getElementById("side-nav");
 const brandHome = document.getElementById("brand-home");
 
 if (!token) {
-  window.location.href = "/login";
+  redirectToLogin();
 } else {
   init();
 }

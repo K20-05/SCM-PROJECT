@@ -45,10 +45,10 @@ export function createUi({ grid, welcomeCard, contentWrapper, brandHome, sideNav
 
     const status = document.createElement("span");
     status.className = `account-status ${user?.is_active ? "is-active" : "is-inactive"}`;
-    status.textContent = user?.is_active ? "Active" : "Inactive";
+    status.textContent = user?.is_active ? "ACTIVE" : "INACTIVE";
 
-    details.append(name, meta, status);
-    account.append(icon, details);
+    details.append(name, meta);
+    account.append(icon, details, status);
 
     const logoutLink = sideNav.querySelector(".logout-link");
     if (logoutLink) {
@@ -114,6 +114,9 @@ export function createUi({ grid, welcomeCard, contentWrapper, brandHome, sideNav
   function panel(title, children, sectionName = "overview") {
     const section = document.createElement("section");
     section.className = "card table-card";
+    if (children.some((child) => child?.classList?.contains("paginated-table"))) {
+      section.classList.add("has-pagination");
+    }
     markSection(section, sectionName);
     const heading = document.createElement("h3");
     heading.textContent = title;
@@ -191,7 +194,9 @@ export function createUi({ grid, welcomeCard, contentWrapper, brandHome, sideNav
     let page = 1;
     const pageCount = Math.max(1, Math.ceil(rows.length / pageSize));
     const wrapper = document.createElement("div");
+    wrapper.className = "paginated-table";
     const tableHost = document.createElement("div");
+    tableHost.className = "paginated-table-body";
     const controls = document.createElement("div");
     const status = document.createElement("span");
     const prev = makeButton("Previous", () => {

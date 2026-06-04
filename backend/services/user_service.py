@@ -221,11 +221,3 @@ async def update_visible_user(user_id: str, payload: UserUpdate) -> dict:
     return sanitize_user(user)
 
 
-async def delete_visible_user(user_id: str) -> None:
-    object_id = object_id_or_400(user_id)
-    result = await get_users_collection().update_one(
-        visible_filter({"_id": object_id}),
-        {"$set": {"is_deleted": True, "is_active": False, "deleted_at": now_utc()}},
-    )
-    if result.matched_count == 0:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")

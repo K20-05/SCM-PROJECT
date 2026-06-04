@@ -1,5 +1,6 @@
 from datetime import datetime, timezone
 
+import certifi
 from motor.motor_asyncio import AsyncIOMotorClient
 from motor.core import AgnosticDatabase
 from pymongo.errors import CollectionInvalid, DuplicateKeyError
@@ -27,7 +28,7 @@ async def connect_to_mongo() -> None:
         return
     if not settings.mongo_url:
         raise RuntimeError("MONGO_URL (or MONGODB_URL) is required in .env")
-    client = AsyncIOMotorClient(settings.mongo_url)
+    client = AsyncIOMotorClient(settings.mongo_url, tlsCAFile=certifi.where())
     database = client[settings.db_name]
     await client.admin.command("ping")
 

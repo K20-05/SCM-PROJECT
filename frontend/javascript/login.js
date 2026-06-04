@@ -110,7 +110,7 @@ form.addEventListener("submit", async (event) => {
 
     setMessage("Login successful. Redirecting...", "success");
     setTimeout(() => {
-      window.location.href = data?.dashboard_url || "/dashboard";
+      window.location.replace(data?.dashboard_url || "/dashboard");
     }, 700);
   } catch (error) {
     setMessage("Cannot reach server. Check backend is running on port 8000.", "error");

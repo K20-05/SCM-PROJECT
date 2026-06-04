@@ -81,7 +81,11 @@ def create_app() -> FastAPI:
     def frontend_page(filename: str) -> FileResponse:
         return FileResponse(
             frontend_dir / "html_files" / filename,
-            headers={"Cache-Control": "no-store"},
+            headers={
+                "Cache-Control": "no-store, no-cache, must-revalidate, max-age=0, private",
+                "Pragma": "no-cache",
+                "Expires": "0",
+            },
         )
 
     @app.get("/")
@@ -120,7 +124,7 @@ def create_app() -> FastAPI:
     async def health():
         return {"status": "ok", "service": "scmxpertlite"}
 
-    @app.get("/ping-db")
+    @app.get("/ping-db", include_in_schema=False)
     async def ping_db(db=Depends(get_db)):
         await db.command("ping")
         return {"db": "connected"}

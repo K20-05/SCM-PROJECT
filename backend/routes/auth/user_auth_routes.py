@@ -3,10 +3,10 @@ from fastapi import APIRouter, Depends, Request, status
 from auth.access_control import require_role
 from auth.auth_deps import get_current_user
 from backend.models.auth_models import ChangePasswordRequest, Token, UserCreate, UserLogin, UserOut, UserSignup, UserUpdate
+from backend.services.admin_user_service import delete_admin_user
 from backend.services.user_service import (
     change_user_password,
     create_manual_user,
-    delete_visible_user,
     get_visible_user,
     list_users_for_admin,
     login_user,
@@ -80,11 +80,11 @@ async def update_me(payload: UserUpdate, current_user: dict = Depends(get_curren
 
 
 @user_crud_router.put("/{user_id}", dependencies=[Depends(require_role("super_admin"))], include_in_schema=False)
-async def update_user(user_id: str, payload: UserUpdate, current_user: dict = Depends(get_current_user)):
+async def update_user(user_id: str, payload: UserUpdate):
     return await update_visible_user(user_id, payload)
 
 
-@user_crud_router.delete("/{user_id}", status_code=status.HTTP_204_NO_CONTENT, dependencies=[Depends(require_role("super_admin"))])
-async def delete_user(user_id: str):
-    await delete_visible_user(user_id)
+@user_crud_router.delete("/{user_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_user(user_id: str, current_user: dict = Depends(require_role("super_admin"))):
+    await delete_admin_user(user_id, current_user)
     return None

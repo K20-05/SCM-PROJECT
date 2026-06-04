@@ -16,6 +16,8 @@
   --value-color: var(--ink);
   --badge-bg: #fff;
   --badge-color: var(--brand);
+  --notification-bg: #fffaf1;
+  --notification-icon-bg: #f2e3cf;
   --success-border: #8abf8a;
   --success-color: #2f6f3a;
   --danger-border: #d49a9a;

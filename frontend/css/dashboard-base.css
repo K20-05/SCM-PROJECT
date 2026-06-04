@@ -5,6 +5,7 @@ body {
   background: var(--page-bg);
   font-size: 17px;
 }
+body.auth-suspended .wrap { visibility: hidden; }
 .wrap { max-width: none; margin: 0; padding: 22px; }
 .topbar {
   position: sticky; top: 0; z-index: 20;
@@ -52,7 +53,8 @@ body {
   outline: 2px solid var(--focus); outline-offset: 2px;
 }
 .sidebar-account {
-  margin-top: auto; display: flex; align-items: flex-start; gap: 10px;
+  margin-top: auto; display: grid; grid-template-columns: 22px minmax(0, 1fr); gap: 4px 10px;
+  align-items: start;
   border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px;
   background: var(--nav-active-bg); color: var(--ink);
 }
@@ -70,10 +72,21 @@ body {
   color: var(--ink); font-size: .78rem; line-height: 1.1;
 }
 .account-status {
-  display: inline-flex; align-items: center; gap: 5px;
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: 22px minmax(0, 1fr);
+  align-items: center;
+  column-gap: 10px;
+  font-size: .72rem;
+  line-height: 1;
 }
 .account-status::before {
-  content: ""; width: 7px; height: 7px; border-radius: 999px; background: var(--danger-color);
+  content: "";
+  justify-self: center;
+  width: 7px;
+  height: 7px;
+  border-radius: 999px;
+  background: var(--danger-color);
 }
 .account-status.is-active::before {
   background: var(--success-color);
@@ -113,6 +126,49 @@ body.role-super-admin .super-admin-only { display: flex; }
 .table-card { grid-column: span 12; }
 .table-card h3 { color: var(--heading-color); }
 .table-scroll { overflow-x: auto; }
+.table-card.has-pagination {
+  display: flex;
+  flex-direction: column;
+}
+.table-card.has-pagination .table-scroll,
+.table-card.has-pagination .paginated-table {
+  min-height: 0;
+}
+.table-card[data-view-section="governance"] {
+  display: flex;
+  flex-direction: column;
+  min-height: calc(100vh - 170px);
+}
+.table-card[data-view-section="governance"] .table-scroll,
+.table-card[data-view-section="governance"] .paginated-table {
+  flex: 1;
+  max-height: none;
+}
+.table-card[data-view-section="governance"] .table-scroll {
+  display: flex;
+  flex-direction: column;
+}
+.table-card[data-view-section="governance"] .paginated-table {
+  min-height: 0;
+}
+.table-card[data-view-section="governance"] .pager {
+  width: 100%;
+}
+.table-card.view-hidden {
+  display: none;
+}
+.paginated-table {
+  display: flex;
+  flex-direction: column;
+  max-height: min(58vh, 620px);
+  overflow: hidden;
+}
+.paginated-table-body {
+  flex: 1;
+  min-width: 720px;
+  min-height: 0;
+  overflow: auto;
+}
 input, select, textarea {
   width: 100%; border: 1px solid var(--line); border-radius: 8px; background: var(--input-bg); color: var(--ink);
   padding: 7px 9px; font: inherit;
@@ -120,6 +176,15 @@ input, select, textarea {
 textarea { resize: vertical; min-height: 84px; }
 .stack-form {
   display: grid; gap: 12px; margin-top: 10px;
+}
+.profile-security {
+  margin-top: 18px;
+  padding-top: 16px;
+  border-top: 1px solid var(--line);
+}
+.profile-security h4 {
+  color: var(--heading-color);
+  font-size: 1rem;
 }
 .shipment-form {
   display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin-top: 10px;
@@ -160,7 +225,12 @@ td {
 }
 .empty-state { color: var(--ink); margin-top: 10px; }
 .pager {
-  display: flex; align-items: center; justify-content: flex-end; gap: 10px; margin-top: 12px;
+  flex-shrink: 0;
+  display: flex; align-items: center; justify-content: flex-end; gap: 10px;
+  margin-top: 0;
+  padding: 12px 0 4px;
+  background: var(--surface);
+  border-top: 1px solid var(--line);
 }
 .inline-actions {
   display: inline-flex; align-items: center; gap: 8px; flex-wrap: wrap;
@@ -168,11 +238,112 @@ td {
 .inline-actions select {
   min-width: 150px;
 }
+.role-actions {
+  display: grid;
+  grid-template-columns: minmax(160px, 1fr) auto;
+  gap: 8px;
+  align-items: center;
+}
+.role-actions select {
+  min-width: 0;
+}
+.role-actions .theme-toggle {
+  white-space: nowrap;
+}
 .shortcut-list {
   display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-top: 10px;
 }
 .shortcut-list .theme-toggle {
   min-width: 120px;
+}
+.notification-list {
+  display: grid;
+  gap: 10px;
+  margin-top: 10px;
+}
+.notification-item {
+  display: grid;
+  grid-template-columns: 42px 1fr;
+  gap: 12px;
+  align-items: center;
+  min-height: 70px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--notification-bg);
+}
+.notification-item i {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 42px;
+  height: 42px;
+  border-radius: 999px;
+  background: var(--notification-icon-bg);
+  color: var(--notification-color);
+}
+.notification-item strong,
+.notification-item span {
+  display: block;
+}
+.notification-item strong {
+  color: var(--heading-color);
+  font-size: 1rem;
+  line-height: 1.2;
+}
+.notification-item span {
+  color: var(--muted);
+  margin-top: 3px;
+  font-size: .9rem;
+  line-height: 1.3;
+}
+.notification-warning { --notification-color: var(--warning-color); }
+.notification-success { --notification-color: var(--success-color); }
+.notification-danger { --notification-color: var(--danger-color); }
+.notification-info { --notification-color: var(--brand); }
+.notification-neutral { --notification-color: var(--muted); }
+.health-list {
+  display: grid;
+  gap: 12px;
+  margin-top: 10px;
+}
+.health-item {
+  display: grid;
+  grid-template-columns: 42px minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: center;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--notification-bg);
+}
+.health-item i {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 42px;
+  height: 42px;
+  border-radius: 999px;
+  background: var(--notification-icon-bg);
+  color: var(--success-color);
+}
+.health-item strong,
+.health-item span {
+  display: block;
+}
+.health-item strong {
+  color: var(--heading-color);
+  font-size: 1rem;
+  line-height: 1.2;
+}
+.health-item span {
+  color: var(--muted);
+  margin-top: 3px;
+  font-size: .9rem;
+  line-height: 1.3;
+}
+.health-badge {
+  white-space: nowrap;
 }
 .pager-status { color: var(--ink); font-size: .88rem; }
 .pager button:disabled { opacity: .5; cursor: not-allowed; }

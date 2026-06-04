@@ -4,6 +4,7 @@ from bson import ObjectId
 from fastapi import HTTPException, status
 
 from backend.models.auth_models import UserRole, UserRoleUpdate
+from backend.routes.auth import user_auth_routes
 from backend.services import admin_user_service, user_service
 
 
@@ -62,6 +63,20 @@ def test_super_admin_cannot_delete_self():
     with_exception = None
     try:
         asyncio.run(admin_user_service.delete_admin_user(user_id, {"_id": user_id, "role": "super_admin"}))
+    except HTTPException as exc:
+        with_exception = exc
+
+    assert with_exception is not None
+    assert with_exception.status_code == status.HTTP_403_FORBIDDEN
+    assert with_exception.detail == "You cannot delete your own account"
+
+
+def test_users_delete_endpoint_cannot_delete_self():
+    user_id = str(ObjectId())
+
+    with_exception = None
+    try:
+        asyncio.run(user_auth_routes.delete_user(user_id, {"_id": user_id, "role": "super_admin"}))
     except HTTPException as exc:
         with_exception = exc
 

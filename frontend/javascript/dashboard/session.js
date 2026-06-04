@@ -11,13 +11,16 @@ export function clearSession() {
   });
 }
 
+export function redirectToLogin() {
+  window.location.replace("/login");
+}
+
 export function logout() {
   clearSession();
-  window.location.href = "/login";
+  redirectToLogin();
 }
 
 export function rememberDashboard(role, dashboardUrl) {
   sessionStorage.setItem("user_role", role);
   sessionStorage.setItem("dashboard_url", dashboardUrl);
 }
-

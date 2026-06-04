@@ -3,6 +3,9 @@ import { escapeHtml, formatDateInputValue, formatDateTime, normalizeRole } from 
 
 const SHIPMENT_STATUSES = ["pending", "in_transit", "out_for_delivery", "delivered", "cancelled"];
 const USER_SHIPMENTS_PATH = "/api/shipments?mine=true";
+const DASHBOARD_TABLE_PAGE_SIZE = 5;
+const GOVERNANCE_TABLE_PAGE_SIZE = 7;
+const RECENT_LOGINS_PAGE_SIZE = 3;
 
 export function createDashboardViews({ api, ui }) {
   function deliveryDate(value) {
@@ -55,22 +58,123 @@ export function createDashboardViews({ api, ui }) {
     const alerts = [];
 
     if (!shipments.length) {
-      alerts.push("No shipment requests yet.");
+      alerts.push({
+        icon: "fa-box-open",
+        title: "No shipment requests",
+        detail: "Create a shipment to start tracking activity.",
+        tone: "neutral",
+      });
     }
     if (pending) {
-      alerts.push(`${pending} pending shipment${pending === 1 ? "" : "s"} editable.`);
+      alerts.push({
+        icon: "fa-pen-to-square",
+        title: `${pending} pending shipment${pending === 1 ? "" : "s"}`,
+        detail: "Still editable before transit begins.",
+        tone: "warning",
+      });
     }
     if (inTransit) {
-      alerts.push(`${inTransit} in transit locked.`);
+      alerts.push({
+        icon: "fa-truck-fast",
+        title: `${inTransit} in transit`,
+        detail: "Locked while delivery is underway.",
+        tone: "info",
+      });
     }
     if (upcoming.length) {
-      alerts.push(`${upcoming.length} delivery${upcoming.length === 1 ? "" : "ies"} due in 7 days.`);
+      alerts.push({
+        icon: "fa-calendar-day",
+        title: `${upcoming.length} upcoming deliver${upcoming.length === 1 ? "y" : "ies"}`,
+        detail: "Expected within the next 7 days.",
+        tone: "success",
+      });
     }
     if (missingDevice) {
-      alerts.push(`${missingDevice} need device assignment.`);
+      alerts.push({
+        icon: "fa-microchip",
+        title: `${missingDevice} device assignment${missingDevice === 1 ? "" : "s"} needed`,
+        detail: "A device is required for live monitoring.",
+        tone: "danger",
+      });
     }
 
-    return alerts.length ? alerts : ["No new alerts."];
+    return alerts.length
+      ? alerts
+      : [{
+          icon: "fa-circle-check",
+          title: "No new alerts",
+          detail: "Your shipments are up to date.",
+          tone: "success",
+        }];
+  }
+
+  function notificationList(alerts) {
+    const list = document.createElement("div");
+    list.className = "notification-list";
+
+    alerts.forEach((alert) => {
+      const item = document.createElement("article");
+      item.className = `notification-item notification-${alert.tone}`;
+
+      const icon = document.createElement("i");
+      icon.className = `fa-solid ${alert.icon}`;
+      icon.setAttribute("aria-hidden", "true");
+
+      const copy = document.createElement("div");
+      const title = document.createElement("strong");
+      const detail = document.createElement("span");
+      title.textContent = alert.title;
+      detail.textContent = alert.detail;
+      copy.append(title, detail);
+
+      item.append(icon, copy);
+      list.appendChild(item);
+    });
+
+    return list;
+  }
+
+  function systemHealthPanel() {
+    const list = document.createElement("div");
+    list.className = "health-list";
+
+    [
+      {
+        icon: "fa-server",
+        label: "Backend",
+        status: "Online",
+        detail: "Protected API is responding.",
+      },
+      {
+        icon: "fa-database",
+        label: "Database",
+        status: "Reachable",
+        detail: "MongoDB access is available through authenticated routes.",
+      },
+    ].forEach((item) => {
+      const row = document.createElement("article");
+      row.className = "health-item";
+
+      const icon = document.createElement("i");
+      icon.className = `fa-solid ${item.icon}`;
+      icon.setAttribute("aria-hidden", "true");
+
+      const copy = document.createElement("div");
+      const title = document.createElement("strong");
+      const detail = document.createElement("span");
+      title.textContent = item.label;
+      detail.textContent = item.detail;
+      copy.append(title, detail);
+
+      const badge = document.createElement("span");
+      badge.className = "badge badge-active health-badge";
+      badge.textContent = item.status;
+
+      row.append(icon, copy, badge);
+      list.appendChild(row);
+    });
+
+    return list;
   }
 
   function shortcutButton(label, path) {
@@ -99,7 +203,6 @@ export function createDashboardViews({ api, ui }) {
     ui.grid.appendChild(ui.card("metric", "In transit", statusCount(shipments, "in_transit")));
     ui.grid.appendChild(ui.card("metric", "Delivered", statusCount(shipments, "delivered")));
     ui.grid.appendChild(ui.card("metric", "Upcoming deliveries", upcoming.length));
-    ui.grid.appendChild(ui.card("metric", "Backend status", "Online"));
 
     ui.grid.appendChild(
       ui.panel("Upcoming deliveries", [
@@ -128,8 +231,8 @@ export function createDashboardViews({ api, ui }) {
     ui.grid.appendChild(ui.panel("Shipment shortcuts", [shortcutList]));
 
     ui.grid.appendChild(
-      ui.panel("Notifications", [
-        ui.textBlock(userNotifications(shipments, upcoming)),
+      ui.panel("Shipment Alerts", [
+        notificationList(userNotifications(shipments, upcoming)),
       ], "notifications")
     );
   }
@@ -171,11 +274,17 @@ export function createDashboardViews({ api, ui }) {
           `User ID: ${user.id || "-"}`,
           `Status: ${user.is_active ? "active" : "inactive"}`,
         ]),
+        buildPasswordForm(),
       ], "profile")
     );
   }
 
-  function renderPasswordPanel(sectionName = "profile") {
+  function buildPasswordForm() {
+    const section = document.createElement("section");
+    section.className = "profile-security";
+    const heading = document.createElement("h4");
+    heading.textContent = "Security";
+
     const form = document.createElement("form");
     form.className = "stack-form";
     form.innerHTML = `
@@ -199,7 +308,8 @@ export function createDashboardViews({ api, ui }) {
       }
     });
     form.append(submit, message);
-    ui.grid.appendChild(ui.panel("Security", [form], sectionName));
+    section.append(heading, form);
+    return section;
   }
 
   function shipmentRows(shipments) {
@@ -369,6 +479,16 @@ export function createDashboardViews({ api, ui }) {
     return button;
   }
 
+  function userShipmentActions(shipment) {
+    const wrapper = document.createElement("div");
+    wrapper.className = "inline-actions";
+    wrapper.appendChild(detailAction(shipment, "shipments"));
+    if (shipment.status === "pending") {
+      wrapper.appendChild(editShipmentAction(shipment));
+    }
+    return wrapper;
+  }
+
   function adminStatusAction(shipment) {
     const wrapper = document.createElement("div");
     wrapper.className = "inline-actions";
@@ -470,19 +590,9 @@ export function createDashboardViews({ api, ui }) {
         ui.panel("My shipments", [
           ui.paginatedTable(
             ["Tracking ID", "Shipment", "Container", "Route", "Status", "Expected delivery", "Device", "Action"],
-            shipments.map((shipment) => [...shipmentRows([shipment])[0], detailAction(shipment, "shipments")]),
+            shipments.map((shipment) => [...shipmentRows([shipment])[0], userShipmentActions(shipment)]),
             shipmentFilterSummary(path),
-            8
-          ),
-        ], "shipments")
-      );
-      children.push(
-        ui.panel("Editable pending shipments", [
-          ui.paginatedTable(
-            ["Tracking ID", "Route", "Status", "Action"],
-            shipments.map((shipment) => [shipment.tracking_id, shipment.route_details, shipment.status, editShipmentAction(shipment)]),
-            shipmentFilterSummary(path),
-            8
+            DASHBOARD_TABLE_PAGE_SIZE
           ),
         ], "shipments")
       );
@@ -501,7 +611,6 @@ export function createDashboardViews({ api, ui }) {
     await renderMyShipments(dashboard.user);
     renderShipmentForm();
     renderProfile(dashboard.user);
-    renderPasswordPanel("security");
   }
 
   async function renderAdmin(dashboard) {
@@ -527,16 +636,17 @@ export function createDashboardViews({ api, ui }) {
           ["Name", "Email", "Role", "Status"],
           users.map((user) => [user.name, user.email, user.role, user.is_active ? "active" : "inactive"]),
           "No users are currently registered.",
-          8
+          DASHBOARD_TABLE_PAGE_SIZE
         ),
       ])
     );
     ui.grid.appendChild(
       ui.panel("Device inventory", [
-        ui.table(
+        ui.paginatedTable(
           ["Device ID", "Status", "Route"],
           devices.map((device) => [device.device_id, device.status, `${device.route_from || "-"} to ${device.route_to || "-"}`]),
-          "No devices are currently registered."
+          "No devices are currently registered.",
+          DASHBOARD_TABLE_PAGE_SIZE
         ),
       ], "devices")
     );
@@ -566,7 +676,7 @@ export function createDashboardViews({ api, ui }) {
               adminShipmentActions(shipment, refreshAdminShipments),
             ]),
             "No shipments are currently tracked.",
-            8
+            DASHBOARD_TABLE_PAGE_SIZE
           ),
         ], "operations")
       );
@@ -575,7 +685,6 @@ export function createDashboardViews({ api, ui }) {
 
     await refreshAdminShipments();
     renderProfile(dashboard.user);
-    renderPasswordPanel("security");
   }
 
   function roleAction(user, currentUserId) {
@@ -584,6 +693,7 @@ export function createDashboardViews({ api, ui }) {
     }
 
     const wrapper = document.createElement("div");
+    wrapper.className = "inline-actions role-actions";
     const select = document.createElement("select");
     ["user", "admin", "super_admin"].forEach((role) => {
       const option = document.createElement("option");
@@ -633,7 +743,7 @@ export function createDashboardViews({ api, ui }) {
 
     ui.grid.appendChild(
       ui.panel("Recent logins", [
-        ui.table(
+        ui.paginatedTable(
           ["Name", "Email", "Role", "Login time"],
           (dashboard.recent_logins || []).map((login) => [
             login.name,
@@ -641,18 +751,9 @@ export function createDashboardViews({ api, ui }) {
             login.role,
             formatDateTime(login.logged_in_at),
           ]),
-          "No login records found."
+          "No login records found.",
+          RECENT_LOGINS_PAGE_SIZE
         ),
-      ])
-    );
-
-    ui.grid.appendChild(
-      ui.panel("Governance rules", [
-        ui.textBlock([
-          "Super admins can assign user, admin, or super admin roles.",
-          "Self role changes and self delete actions are blocked.",
-          "Deleted or inactive accounts stay protected by backend authorization.",
-        ]),
       ])
     );
 
@@ -666,25 +767,13 @@ export function createDashboardViews({ api, ui }) {
           ["Name", "Email", "Current role", "Action"],
           users.map((user) => [user.name, user.email, user.role, roleAction(user, dashboard.user.id)]),
           "No users are currently available for role governance.",
-          8
+          GOVERNANCE_TABLE_PAGE_SIZE
         ),
       ], "governance")
     );
 
-    const admins = users.filter((user) => user.role === "admin" || user.role === "super_admin");
-    ui.grid.appendChild(
-      ui.panel("Admin roster", [
-        ui.paginatedTable(
-          ["Name", "Email", "Role", "Status"],
-          admins.map((user) => [user.name, user.email, user.role, user.is_active ? "active" : "inactive"]),
-          "No admin accounts are currently listed.",
-          8
-        ),
-      ], "governance")
-    );
-    ui.grid.appendChild(ui.panel("System health", [ui.textBlock(["Backend: online", "Database: reachable through protected API access"])], "health"));
+    ui.grid.appendChild(ui.panel("System health", [systemHealthPanel()], "health"));
     renderProfile(dashboard.user);
-    renderPasswordPanel("security");
   }
 
   return { renderAdmin, renderSuperAdmin, renderUser };

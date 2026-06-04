@@ -15,7 +15,7 @@ export function createApiClient({ token, tokenType }) {
       },
     });
     const data = await response.json().catch(() => null);
-    if (response.status === 401) {
+    if (response.status === 401 || (response.status === 403 && data?.detail === "Account is inactive")) {
       logout();
       return null;
     }
@@ -37,4 +37,3 @@ export async function loadList(api, path) {
 export function listItems(result) {
   return Array.isArray(result) ? result : result.items || [];
 }
-
