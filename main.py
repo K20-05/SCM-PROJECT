@@ -77,6 +77,7 @@ def create_app() -> FastAPI:
 
     app.mount("/css", StaticFiles(directory=frontend_dir / "css"), name="css")
     app.mount("/javascript", StaticFiles(directory=frontend_dir / "javascript"), name="javascript")
+    app.mount("/assets", StaticFiles(directory=frontend_dir / "assets"), name="assets")
 
     def frontend_page(filename: str) -> FileResponse:
         return FileResponse(
@@ -115,10 +116,6 @@ def create_app() -> FastAPI:
     @app.get("/dashboard/super-admin")
     async def super_admin_dashboard_page():
         return frontend_page("dashboard.html")
-
-    @app.get("/signup-dark")
-    async def signup_dark_page():
-        return RedirectResponse(url="/signup?theme=dark", status_code=307)
 
     @app.get("/health")
     async def health():

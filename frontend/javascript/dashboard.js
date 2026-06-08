@@ -42,8 +42,6 @@ async function init() {
   const ui = createUi({ grid, welcomeCard, contentWrapper, brandHome, sideNav });
   const views = createDashboardViews({ api, ui });
 
-  const logoutBtn = document.getElementById("logout-btn");
-  if (logoutBtn) logoutBtn.addEventListener("click", logout);
   const sidebarLogoutBtn = document.getElementById("sidebar-logout-btn");
   if (sidebarLogoutBtn) sidebarLogoutBtn.addEventListener("click", logout);
   if (navToggle && sideNav) {

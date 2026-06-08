@@ -2,6 +2,8 @@ from fastapi import APIRouter, Depends, Request, status
 
 from auth.access_control import require_role
 from auth.auth_deps import get_current_user
+from auth.captcha import captcha_config, create_local_captcha, verify_login_captcha
+from auth.rate_limit import auth_rate_limit
 from backend.models.auth_models import ChangePasswordRequest, Token, UserCreate, UserLogin, UserOut, UserSignup, UserUpdate
 from backend.services.admin_user_service import delete_admin_user
 from backend.services.user_service import (
@@ -21,12 +23,12 @@ router = APIRouter(prefix="/api/auth", tags=["Auth"])
 user_crud_router = APIRouter(prefix="/api/users", tags=["Users"])
 
 
-@router.post("/signup", response_model=UserOut, status_code=status.HTTP_201_CREATED)
+@router.post("/signup", response_model=UserOut, status_code=status.HTTP_201_CREATED, dependencies=[Depends(auth_rate_limit)])
 async def signup(payload: UserSignup):
     return await signup_user(payload)
 
 
-@router.post("/login", response_model=Token)
+@router.post("/login", response_model=Token, dependencies=[Depends(auth_rate_limit)])
 async def login(request: Request):
     content_type = (request.headers.get("content-type") or "").lower()
 
@@ -38,10 +40,21 @@ async def login(request: Request):
     else:
         data = await request.json()
         payload = UserLogin.model_validate(data)
+        await verify_login_captcha(data, request)
         email = payload.email
         password = payload.password
 
     return await login_user(email, password)
+
+
+@router.get("/captcha/config", include_in_schema=False)
+async def get_captcha_config():
+    return captcha_config()
+
+
+@router.get("/captcha", include_in_schema=False)
+async def get_captcha():
+    return create_local_captcha()
 
 
 @router.get("/me", response_model=UserOut)
@@ -49,7 +62,7 @@ async def get_me(current_user: dict = Depends(get_current_user)):
     return user_out_from_document(current_user)
 
 
-@router.post("/change-password")
+@router.post("/change-password", dependencies=[Depends(auth_rate_limit)])
 async def change_password(payload: ChangePasswordRequest, current_user: dict = Depends(get_current_user)):
     return await change_user_password(payload, current_user)
 

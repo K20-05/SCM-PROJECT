@@ -31,6 +31,8 @@ class _FakeDevicesCollection:
         rows = self.docs
         if query.get("is_deleted", {}).get("$ne") is True:
             rows = [doc for doc in rows if doc.get("is_deleted") is not True]
+        if isinstance(query.get("device_id"), dict) and "$in" in query["device_id"]:
+            rows = [doc for doc in rows if doc.get("device_id") in query["device_id"]["$in"]]
         return _FakeCursor(rows)
 
     async def find_one(self, query: dict, projection: dict | None = None):
@@ -68,6 +70,30 @@ class _FakeDevicesCollection:
             del self.docs[idx]
             return type("DeleteResult", (), {"deleted_count": 1})()
         return type("DeleteResult", (), {"deleted_count": 0})()
+
+
+class _FakeShipmentsCollection:
+    def __init__(self, docs: list[dict]):
+        self.docs = docs
+
+    def find(self, query: dict, _projection: dict):
+        return _FakeCursor([doc for doc in self.docs if self._matches(doc, query)])
+
+    async def find_one(self, query: dict, projection: dict | None = None):
+        for doc in self.docs:
+            if self._matches(doc, query):
+                return dict(doc)
+        return None
+
+    def _matches(self, doc: dict, query: dict) -> bool:
+        for key, expected in query.items():
+            if isinstance(expected, dict) and "$ne" in expected:
+                if doc.get(key) == expected["$ne"]:
+                    return False
+                continue
+            if doc.get(key) != expected:
+                return False
+        return True
 
 
 def _seed_device(fake: _FakeDevicesCollection, *, deleted: bool = False):
@@ -152,3 +178,40 @@ def test_list_devices_hides_soft_deleted(monkeypatch):
 
     assert len(items) == 1
     assert items[0].device_id == "DEV-1"
+
+
+def test_user_lists_only_devices_linked_to_owned_shipments(monkeypatch):
+    devices = _FakeDevicesCollection()
+    _seed_device(devices)
+    _seed_device(devices)
+    devices.docs[1]["device_id"] = "DEV-2"
+    shipments = _FakeShipmentsCollection(
+        [
+            {"owner_id": "owner-1", "device_id": "DEV-2", "is_deleted": False},
+            {"owner_id": "owner-2", "device_id": "DEV-1", "is_deleted": False},
+        ]
+    )
+    monkeypatch.setattr(device_service, "get_devices_collection", lambda: devices)
+    monkeypatch.setattr(device_service, "get_shipments_collection", lambda: shipments)
+
+    items = asyncio.run(device_service.list_devices({"_id": "owner-1", "role": "user"}))
+
+    assert len(items) == 1
+    assert items[0].device_id == "DEV-2"
+
+
+def test_user_cannot_get_unowned_device(monkeypatch):
+    devices = _FakeDevicesCollection()
+    _seed_device(devices)
+    shipments = _FakeShipmentsCollection([{"owner_id": "owner-2", "device_id": "DEV-1", "is_deleted": False}])
+    monkeypatch.setattr(device_service, "get_devices_collection", lambda: devices)
+    monkeypatch.setattr(device_service, "get_shipments_collection", lambda: shipments)
+
+    with_exception = None
+    try:
+        asyncio.run(device_service.get_device("DEV-1", {"_id": "owner-1", "role": "user"}))
+    except HTTPException as exc:
+        with_exception = exc
+
+    assert with_exception is not None
+    assert with_exception.status_code == 403

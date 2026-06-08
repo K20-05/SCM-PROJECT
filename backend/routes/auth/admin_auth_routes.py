@@ -29,7 +29,7 @@ async def list_users(_current_user: dict = Depends(require_role("admin"))):
 async def update_user_role(
     user_id: str,
     payload: UserRoleUpdate,
-    current_user: dict = Depends(require_role("super_admin")),
+    current_user: dict = Depends(require_role("admin")),
 ):
     return await update_user_role_service(user_id, payload, current_user)
 

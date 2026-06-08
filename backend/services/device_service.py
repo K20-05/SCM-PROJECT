@@ -4,7 +4,7 @@ from fastapi import HTTPException, status
 from pymongo import ReturnDocument
 from pymongo.errors import DuplicateKeyError
 
-from backend.database.mongo import get_devices_collection
+from backend.database.mongo import get_devices_collection, get_shipments_collection
 from backend.models.device_model import DeviceCreate, DeviceOut, DeviceUpdate
 
 
@@ -21,12 +21,47 @@ def to_device_out(document: dict) -> DeviceOut:
     )
 
 
-async def list_devices() -> list[DeviceOut]:
-    devices = await get_devices_collection().find({"is_deleted": {"$ne": True}}, {"_id": 0}).to_list(length=1000)
+def _is_admin(current_user: dict | None) -> bool:
+    return current_user is None or current_user.get("role") in {"admin", "super_admin"}
+
+
+async def _owned_device_ids(current_user: dict) -> list[str]:
+    shipments = await get_shipments_collection().find(
+        {
+            "owner_id": str(current_user["_id"]),
+            "device_id": {"$ne": None},
+            "is_deleted": {"$ne": True},
+        },
+        {"_id": 0, "device_id": 1},
+    ).to_list(length=1000)
+    return sorted({shipment["device_id"] for shipment in shipments if shipment.get("device_id")})
+
+
+async def list_devices(current_user: dict | None = None) -> list[DeviceOut]:
+    query = {"is_deleted": {"$ne": True}}
+    if not _is_admin(current_user):
+        device_ids = await _owned_device_ids(current_user)
+        if not device_ids:
+            return []
+        query["device_id"] = {"$in": device_ids}
+
+    devices = await get_devices_collection().find(query, {"_id": 0}).to_list(length=1000)
     return [to_device_out(device) for device in devices]
 
 
-async def get_device(device_id: str) -> DeviceOut:
+async def get_device(device_id: str, current_user: dict | None = None) -> DeviceOut:
+    if not _is_admin(current_user):
+        owned_shipment = await get_shipments_collection().find_one(
+            {
+                "owner_id": str(current_user["_id"]),
+                "device_id": device_id,
+                "is_deleted": {"$ne": True},
+            },
+            {"_id": 1},
+        )
+        if not owned_shipment:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not authorized to view this device")
+
     device = await get_devices_collection().find_one({"device_id": device_id, "is_deleted": {"$ne": True}}, {"_id": 0})
     if not device:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Device not found")

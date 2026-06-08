@@ -16,13 +16,13 @@ router = APIRouter(prefix="/api/devices", tags=["Devices"])
 
 
 @router.get("", response_model=list[DeviceOut])
-async def list_devices(_current_user: dict = Depends(get_current_user)):
-    return await list_devices_service()
+async def list_devices(current_user: dict = Depends(get_current_user)):
+    return await list_devices_service(current_user)
 
 
 @router.get("/{device_id}", response_model=DeviceOut)
-async def get_device(device_id: str, _current_user: dict = Depends(get_current_user)):
-    return await get_device_service(device_id)
+async def get_device(device_id: str, current_user: dict = Depends(get_current_user)):
+    return await get_device_service(device_id, current_user)
 
 
 @router.post("", response_model=DeviceOut, status_code=status.HTTP_201_CREATED, dependencies=[Depends(require_role("admin"))])

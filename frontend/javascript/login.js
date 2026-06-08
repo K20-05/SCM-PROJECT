@@ -5,6 +5,13 @@ const submitIcon = document.getElementById("submit-icon");
 const submitText = document.getElementById("submit-text");
 const passwordInput = document.getElementById("password");
 const passwordCapsWarning = document.getElementById("password-caps-warning");
+const captchaGroup = document.getElementById("captcha-group");
+const googleCaptcha = document.getElementById("google-captcha");
+const localCaptcha = document.getElementById("local-captcha");
+const captchaQuestion = document.getElementById("captcha-question");
+const captchaAnswer = document.getElementById("captcha-answer");
+const captchaRefresh = document.getElementById("captcha-refresh");
+const captchaError = document.getElementById("captcha-error");
 
 const fields = {
   email: document.getElementById("email"),
@@ -22,6 +29,9 @@ const touched = {
 };
 
 let submitted = false;
+let captchaProvider = "local";
+let captchaId = "";
+let recaptchaWidgetId = null;
 
 function setMessage(text, type) {
   messageBox.textContent = text;
@@ -40,10 +50,25 @@ function getValues() {
   };
 }
 
+function captchaPayload() {
+  if (captchaProvider === "google") {
+    return {
+      recaptcha_token: window.grecaptcha && recaptchaWidgetId !== null
+        ? window.grecaptcha.getResponse(recaptchaWidgetId)
+        : "",
+    };
+  }
+  return {
+    captcha_id: captchaId,
+    captcha_answer: captchaAnswer.value.trim(),
+  };
+}
+
 function validate(values) {
   const fieldErrors = {
     email: "",
     password: "",
+    captcha: "",
   };
 
   if (!values.email) fieldErrors.email = "Email is required.";
@@ -52,6 +77,14 @@ function validate(values) {
   const emailPattern = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
   if (values.email && !emailPattern.test(values.email)) {
     fieldErrors.email = "Please enter a valid email.";
+  }
+  if (captchaProvider === "google") {
+    const token = window.grecaptcha && recaptchaWidgetId !== null
+      ? window.grecaptcha.getResponse(recaptchaWidgetId)
+      : "";
+    if (!token) fieldErrors.captcha = "Please complete the CAPTCHA.";
+  } else if (!captchaAnswer.value.trim()) {
+    fieldErrors.captcha = "CAPTCHA answer is required.";
   }
 
   const isValid = Object.values(fieldErrors).every((msg) => !msg);
@@ -65,6 +98,8 @@ function renderValidation(result) {
     el.textContent = show ? msg : "";
     fields[key].classList.toggle("invalid", show && Boolean(msg));
   });
+  captchaError.textContent = submitted ? result.fieldErrors.captcha || "" : "";
+  captchaAnswer?.classList.toggle("invalid", submitted && Boolean(result.fieldErrors.captcha));
 }
 
 form.addEventListener("submit", async (event) => {
@@ -85,12 +120,13 @@ form.addEventListener("submit", async (event) => {
     const response = await fetch("/api/auth/login", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(values),
+      body: JSON.stringify({ ...values, ...captchaPayload() }),
     });
 
     const data = await response.json().catch(() => ({}));
     if (!response.ok) {
       setMessage(data?.detail || "Login failed. Please check your credentials.", "error");
+      resetCaptcha();
       return;
     }
 
@@ -114,6 +150,7 @@ form.addEventListener("submit", async (event) => {
     }, 700);
   } catch (error) {
     setMessage("Cannot reach server. Check backend is running on port 8000.", "error");
+    resetCaptcha();
   } finally {
     submitBtn.disabled = false;
     submitIcon.className = "fa-solid fa-right-to-bracket";
@@ -124,6 +161,8 @@ form.addEventListener("submit", async (event) => {
 form.addEventListener("input", () => {
   renderValidation(validate(getValues()));
 });
+
+captchaRefresh?.addEventListener("click", loadLocalCaptcha);
 
 Object.entries(fields).forEach(([key, input]) => {
   input.addEventListener("blur", () => {
@@ -159,3 +198,64 @@ passwordInput.addEventListener("blur", () => {
 });
 
 renderValidation(validate(getValues()));
+initCaptcha();
+
+async function initCaptcha() {
+  try {
+    const response = await fetch("/api/auth/captcha/config");
+    if (!response.ok) throw new Error("CAPTCHA config unavailable");
+    const config = await response.json();
+    captchaProvider = config.provider || "local";
+    if (captchaProvider === "google" && config.site_key) {
+      localCaptcha.hidden = true;
+      loadGoogleCaptcha(config.site_key);
+      return;
+    }
+  } catch (error) {
+    captchaProvider = "local";
+  }
+  googleCaptcha.hidden = true;
+  localCaptcha.hidden = false;
+  await loadLocalCaptcha();
+}
+
+function loadGoogleCaptcha(siteKey) {
+  window.renderLoginCaptcha = () => {
+    recaptchaWidgetId = window.grecaptcha.render("google-captcha", { sitekey: siteKey });
+  };
+  const script = document.createElement("script");
+  script.src = "https://www.google.com/recaptcha/api.js?onload=renderLoginCaptcha&render=explicit";
+  script.async = true;
+  script.defer = true;
+  document.head.appendChild(script);
+}
+
+async function loadLocalCaptcha() {
+  captchaQuestion.textContent = "Loading...";
+  captchaAnswer.disabled = true;
+  captchaRefresh.disabled = true;
+  try {
+    const response = await fetch("/api/auth/captcha");
+    if (!response.ok) throw new Error("CAPTCHA unavailable");
+    const data = await response.json();
+    captchaId = data.captcha_id || "";
+    captchaQuestion.textContent = data.question || "Refresh CAPTCHA";
+    captchaAnswer.value = "";
+    captchaError.textContent = "";
+  } catch (error) {
+    captchaId = "";
+    captchaQuestion.textContent = "Not loaded";
+    captchaError.textContent = "Could not load CAPTCHA.";
+  } finally {
+    captchaAnswer.disabled = false;
+    captchaRefresh.disabled = false;
+  }
+}
+
+function resetCaptcha() {
+  if (captchaProvider === "google" && window.grecaptcha && recaptchaWidgetId !== null) {
+    window.grecaptcha.reset(recaptchaWidgetId);
+    return;
+  }
+  loadLocalCaptcha();
+}

@@ -69,6 +69,17 @@ async def update_user_role(user_id: str, payload: UserRoleUpdate, current_user: 
     user = await users_collection.find_one(visible_filter({"_id": object_id}))
     if not user:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+    if not is_super_admin(current_user):
+        if payload.role == UserRole.SUPER_ADMIN:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Admins cannot assign super admin roles",
+            )
+        if is_super_admin(user):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Super admin accounts are locked",
+            )
 
     result = await users_collection.update_one(
         visible_filter({"_id": object_id}),

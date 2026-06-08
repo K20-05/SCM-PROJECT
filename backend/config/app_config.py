@@ -9,14 +9,12 @@ DEFAULT_ROLES = [
     {"name": "super_admin", "level": 100},
 ]
 
-
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
 
     mongo_url: str = Field(validation_alias=AliasChoices("MONGO_URL", "MONGODB_URL"))
     db_name: str = Field(default="scm_project", validation_alias=AliasChoices("DB_NAME", "MONGODB_DB_NAME"))
     jwt_secret: str = Field(
-        default="change-me-in-env",
         validation_alias=AliasChoices("JWT_SECRET", "JWT_SECRET_KEY"),
     )
     jwt_expire_minutes: int = Field(default=60, validation_alias="JWT_EXPIRE_MINUTES")
@@ -25,6 +23,10 @@ class Settings(BaseSettings):
     app_version: str = Field(default="0.1.0", validation_alias="APP_VERSION")
     default_role: str = Field(default="user", validation_alias="DEFAULT_ROLE")
     cors_origins: str = Field(default="http://localhost:3000", validation_alias="CORS_ORIGINS")
+    auth_rate_limit_requests: int = Field(default=5, validation_alias="AUTH_RATE_LIMIT_REQUESTS")
+    auth_rate_limit_window_seconds: int = Field(default=60, validation_alias="AUTH_RATE_LIMIT_WINDOW_SECONDS")
+    recaptcha_site_key: str = Field(default="", validation_alias="RECAPTCHA_SITE_KEY")
+    recaptcha_secret_key: str = Field(default="", validation_alias="RECAPTCHA_SECRET_KEY")
 
     users_collection_name: str = Field(default="users", validation_alias="USERS_COLLECTION_NAME")
     logins_collection_name: str = Field(default="login", validation_alias="LOGINS_COLLECTION_NAME")

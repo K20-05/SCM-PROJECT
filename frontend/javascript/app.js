@@ -1,2 +1,0 @@
-// Frontend JS placeholder
-

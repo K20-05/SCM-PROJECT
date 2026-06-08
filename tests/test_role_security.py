@@ -153,3 +153,90 @@ def test_super_admin_cannot_change_own_role():
     assert with_exception is not None
     assert with_exception.status_code == status.HTTP_403_FORBIDDEN
     assert with_exception.detail == "You cannot change your own role"
+
+
+def test_admin_can_update_user_to_admin(monkeypatch):
+    user_id = ObjectId()
+    fake = _FakeRoleUsersCollection(
+        {
+            "_id": user_id,
+            "name": "User",
+            "email": "user@example.com",
+            "phone": "9876543212",
+            "role": "user",
+            "is_active": True,
+        }
+    )
+    monkeypatch.setattr(admin_user_service, "get_users_collection", lambda: fake)
+
+    result = asyncio.run(
+        admin_user_service.update_user_role(
+            str(user_id),
+            UserRoleUpdate(role=UserRole.ADMIN),
+            {"_id": str(ObjectId()), "role": "admin"},
+        )
+    )
+
+    assert result.role == UserRole.ADMIN
+
+
+def test_admin_cannot_assign_super_admin_role(monkeypatch):
+    user_id = ObjectId()
+    fake = _FakeRoleUsersCollection(
+        {
+            "_id": user_id,
+            "name": "User",
+            "email": "user@example.com",
+            "phone": "9876543213",
+            "role": "user",
+            "is_active": True,
+        }
+    )
+    monkeypatch.setattr(admin_user_service, "get_users_collection", lambda: fake)
+
+    with_exception = None
+    try:
+        asyncio.run(
+            admin_user_service.update_user_role(
+                str(user_id),
+                UserRoleUpdate(role=UserRole.SUPER_ADMIN),
+                {"_id": str(ObjectId()), "role": "admin"},
+            )
+        )
+    except HTTPException as exc:
+        with_exception = exc
+
+    assert with_exception is not None
+    assert with_exception.status_code == status.HTTP_403_FORBIDDEN
+    assert with_exception.detail == "Admins cannot assign super admin roles"
+
+
+def test_admin_cannot_change_super_admin_account(monkeypatch):
+    user_id = ObjectId()
+    fake = _FakeRoleUsersCollection(
+        {
+            "_id": user_id,
+            "name": "Super Admin",
+            "email": "super@example.com",
+            "phone": "9876543214",
+            "role": "super_admin",
+            "is_active": True,
+        }
+    )
+    monkeypatch.setattr(admin_user_service, "get_users_collection", lambda: fake)
+
+    with_exception = None
+    try:
+        asyncio.run(
+            admin_user_service.update_user_role(
+                str(user_id),
+                UserRoleUpdate(role=UserRole.ADMIN),
+                {"_id": str(ObjectId()), "role": "admin"},
+            )
+        )
+    except HTTPException as exc:
+        with_exception = exc
+
+    assert with_exception is not None
+    assert with_exception.status_code == status.HTTP_403_FORBIDDEN
+    assert with_exception.detail == "Super admin accounts are locked"

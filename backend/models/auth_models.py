@@ -78,6 +78,9 @@ class UserSignup(BaseModel):
 class UserLogin(BaseModel):
     email: EmailStr
     password: str
+    recaptcha_token: str | None = None
+    captcha_id: str | None = None
+    captcha_answer: str | None = None
 
 
 class ChangePasswordRequest(BaseModel):

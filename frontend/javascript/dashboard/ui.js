@@ -24,6 +24,23 @@ export function createUi({ grid, welcomeCard, contentWrapper, brandHome, sideNav
     const name = user?.name || "there";
     welcomeCard.querySelector("h1").textContent = titleForRole(role);
     welcomeCard.querySelector("p").textContent = `Signed in as ${name} with ${roleLabel(role)} access.`;
+    welcomeCard.querySelector(".quick-stats-strip")?.remove();
+  }
+
+  function setQuickStats(stats) {
+    welcomeCard.querySelector(".quick-stats-strip")?.remove();
+    const visibleStats = stats.filter((stat) => stat.value !== undefined && stat.value !== null);
+    if (!visibleStats.length) return;
+
+    const strip = document.createElement("div");
+    strip.className = "quick-stats-strip";
+    visibleStats.forEach((stat) => {
+      const item = document.createElement("span");
+      item.className = "quick-stat";
+      item.innerHTML = `<strong>${stat.value}</strong>${stat.label}`;
+      strip.appendChild(item);
+    });
+    welcomeCard.appendChild(strip);
   }
 
   function setSidebarUser(role, user) {
@@ -32,6 +49,9 @@ export function createUi({ grid, welcomeCard, contentWrapper, brandHome, sideNav
 
     const account = document.createElement("section");
     account.className = "sidebar-account";
+    account.setAttribute("role", "button");
+    account.setAttribute("tabindex", "0");
+    account.setAttribute("aria-label", "Open profile");
 
     const icon = document.createElement("i");
     icon.className = "fa-solid fa-circle-user";
@@ -49,6 +69,13 @@ export function createUi({ grid, welcomeCard, contentWrapper, brandHome, sideNav
 
     details.append(name, meta);
     account.append(icon, details, status);
+    account.addEventListener("click", () => setActiveSection("profile"));
+    account.addEventListener("keydown", (event) => {
+      if (event.key === "Enter" || event.key === " ") {
+        event.preventDefault();
+        setActiveSection("profile");
+      }
+    });
 
     const logoutLink = sideNav.querySelector(".logout-link");
     if (logoutLink) {
@@ -75,6 +102,7 @@ export function createUi({ grid, welcomeCard, contentWrapper, brandHome, sideNav
       link.classList.toggle("active", isActive);
       link.setAttribute("aria-current", isActive ? "page" : "false");
     });
+    document.querySelector(".sidebar-account")?.classList.toggle("active", normalizedSection === "profile");
 
     document.body.classList.remove("nav-open");
   }
@@ -140,7 +168,7 @@ export function createUi({ grid, welcomeCard, contentWrapper, brandHome, sideNav
   function makeButton(label, onClick) {
     const button = document.createElement("button");
     button.type = "button";
-    button.className = "theme-toggle";
+    button.className = "action-button";
     button.textContent = label;
     button.addEventListener("click", onClick);
     return button;
@@ -235,6 +263,7 @@ export function createUi({ grid, welcomeCard, contentWrapper, brandHome, sideNav
     setActiveSection,
     setBrandHome,
     setVerifiedRole,
+    setQuickStats,
     revealDashboard,
     setWelcome,
     setSidebarUser,

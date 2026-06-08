@@ -2,9 +2,18 @@ import { listItems, loadList } from "./api.js";
 import { escapeHtml, formatDateInputValue, formatDateTime, normalizeRole } from "./format.js";
 
 const SHIPMENT_STATUSES = ["pending", "in_transit", "out_for_delivery", "delivered", "cancelled"];
+const SHIPMENT_ROUTES = [
+  "Chennai - Hyderabad via NH16",
+  "Chennai - Bangalore via NH48",
+  "Bangalore - Mumbai via NH48",
+  "Hyderabad - Pune via NH65",
+  "Mumbai - Delhi via NH48",
+];
+const GOODS_TYPES = ["Electronics", "Medicines", "Food products", "Textiles", "Automotive parts", "General cargo"];
+const FALLBACK_DEVICE_OPTIONS = ["GPS tracker", "Thermal tracker", "Humidity sensor", "Shock sensor"];
 const USER_SHIPMENTS_PATH = "/api/shipments?mine=true";
 const DASHBOARD_TABLE_PAGE_SIZE = 5;
-const GOVERNANCE_TABLE_PAGE_SIZE = 7;
+const USER_MANAGEMENT_TABLE_PAGE_SIZE = 5;
 const RECENT_LOGINS_PAGE_SIZE = 3;
 
 export function createDashboardViews({ api, ui }) {
@@ -267,23 +276,22 @@ export function createDashboardViews({ api, ui }) {
     });
     form.append(save, message);
 
-    ui.grid.appendChild(
-      ui.panel("Profile", [
-        form,
-        ui.textBlock([
-          `User ID: ${user.id || "-"}`,
-          `Status: ${user.is_active ? "active" : "inactive"}`,
-        ]),
-        buildPasswordForm(),
-      ], "profile")
-    );
+    const profileDetails = document.createElement("section");
+    profileDetails.className = "profile-details";
+    profileDetails.append(form);
+
+    const layout = document.createElement("div");
+    layout.className = "profile-layout";
+    layout.append(profileDetails, buildPasswordForm());
+
+    ui.grid.appendChild(ui.panel("Profile", [layout], "profile"));
   }
 
   function buildPasswordForm() {
     const section = document.createElement("section");
     section.className = "profile-security";
     const heading = document.createElement("h4");
-    heading.textContent = "Security";
+    heading.textContent = "Password";
 
     const form = document.createElement("form");
     form.className = "stack-form";
@@ -356,10 +364,6 @@ export function createDashboardViews({ api, ui }) {
     form.className = "shipment-filter-form";
     form.innerHTML = `
       <label>Container<input name="container_number" placeholder="Container number"></label>
-      <label>Status<select name="status">
-        <option value="">All statuses</option>
-        ${SHIPMENT_STATUSES.map((status) => `<option value="${status}">${status.replace(/_/g, " ")}</option>`).join("")}
-      </select></label>
       <label>Expected date<input name="expected_delivery_date" type="date"></label>
     `;
     const message = document.createElement("p");
@@ -391,35 +395,58 @@ export function createDashboardViews({ api, ui }) {
     const url = new URL(path, window.location.origin);
     const labels = [];
     const container = url.searchParams.get("container_number");
-    const status = url.searchParams.get("status");
     const expected = url.searchParams.get("expected_delivery_date");
 
     if (container) labels.push(`container ${container}`);
-    if (status) labels.push(`status ${status.replace(/_/g, " ")}`);
     if (expected) labels.push(`expected date ${expected}`);
 
     return labels.length ? `No shipments match ${labels.join(", ")}.` : "No shipment requests found.";
   }
 
-  function renderShipmentForm() {
+  function selectOptions(options, selectedValue = "", placeholder = "Select option") {
+    const normalizedSelected = String(selectedValue || "");
+    const uniqueOptions = [...new Set([normalizedSelected, ...options].filter(Boolean))];
+    return [
+      `<option value="">${escapeHtml(placeholder)}</option>`,
+      ...uniqueOptions.map((option) => {
+        const selected = option === normalizedSelected ? " selected" : "";
+        return `<option value="${escapeHtml(option)}"${selected}>${escapeHtml(option)}</option>`;
+      }),
+    ].join("");
+  }
+
+  async function deviceOptions(selectedValue = "") {
+    const devicesResult = await loadList(api, "/api/devices");
+    const devices = listItems(devicesResult);
+    const availableDevices = devices.filter((device) => device.status === "available");
+    const source = availableDevices.length ? availableDevices : devices;
+    const options = source.length
+      ? source.map((device) => device.device_id || device.device || device.name).filter(Boolean)
+      : FALLBACK_DEVICE_OPTIONS;
+    return selectOptions(options, selectedValue, "Select requested device");
+  }
+
+  async function renderShipmentForm(successSection = "shipments", onCreated = null) {
+    const requestedDeviceOptions = await deviceOptions();
     const form = document.createElement("form");
     form.className = "shipment-form";
     form.innerHTML = `
-      <label>Shipment number<input name="shipment_number" required></label>
-      <label>Container number<input name="container_number" required></label>
-      <label>Route details<input name="route_details" required></label>
-      <label>Goods type<input name="goods_type" required></label>
-      <label>Requested device<input name="device" required></label>
+      <label>Shipment number<input name="shipment_number" placeholder="Example: SHP-2026-0001" required></label>
+      <label>Container number<input name="container_number" placeholder="Example: CONT-45821" required></label>
+      <label class="full-span">Route details<select name="route_details" required>${selectOptions(SHIPMENT_ROUTES, "", "Select route")}</select></label>
+      <label>Goods type<select name="goods_type" required>${selectOptions(GOODS_TYPES, "", "Select goods type")}</select></label>
+      <label>Requested device<select name="device" required>${requestedDeviceOptions}</select></label>
       <label>Expected delivery<input name="expected_delivery_date" type="datetime-local" required></label>
-      <label>Phone number<input name="ph_number" required></label>
-      <label>Delivery number<input name="delivery_number" required></label>
-      <label>NDC number<input name="ndc_number" required></label>
-      <label>Batch ID<input name="batch_id" required></label>
-      <label>Serial number<input name="serial_number_of_goods" required></label>
-      <label class="full-span">Description<textarea name="shipment_description" rows="3" required></textarea></label>
+      <label>Phone number<input name="ph_number" placeholder="Example: 9876543210" required></label>
+      <label>Delivery number<input name="delivery_number" placeholder="Example: DEL-2026-0008" required></label>
+      <label>NDC number<input name="ndc_number" placeholder="Example: NDC-8891" required></label>
+      <label>Batch ID<input name="batch_id" placeholder="Example: BATCH-A17" required></label>
+      <label>Serial number<input name="serial_number_of_goods" placeholder="Example: SER-CC-2026-0002" required></label>
+      <label class="full-span">Description<textarea name="shipment_description" rows="3" placeholder="Example: Temperature-sensitive medicines packed in sealed cartons." required></textarea></label>
     `;
     const message = document.createElement("p");
     const submit = ui.makeButton("Create shipment", async () => {
+      if (!form.reportValidity()) return;
       const payload = Object.fromEntries(new FormData(form).entries());
       message.textContent = "";
       submit.disabled = true;
@@ -429,29 +456,71 @@ export function createDashboardViews({ api, ui }) {
           body: JSON.stringify(payload),
         });
         form.reset();
-        message.textContent = `Shipment ${created.tracking_id} created.`;
+        message.textContent = "";
+        showShipmentSuccessDialog(created, successSection, onCreated);
       } catch (error) {
         message.textContent = error.message;
       } finally {
         submit.disabled = false;
       }
     });
-    form.append(submit, message);
+    const actions = document.createElement("div");
+    actions.className = "form-actions full-span";
+    actions.append(submit, message);
+    form.append(actions);
     ui.grid.appendChild(ui.panel("New shipment", [form], "new-shipment"));
+  }
+
+  function showShipmentSuccessDialog(created, successSection, onCreated) {
+    const overlay = document.createElement("div");
+    overlay.className = "dialog-overlay active";
+    overlay.setAttribute("role", "dialog");
+    overlay.setAttribute("aria-modal", "true");
+    overlay.setAttribute("aria-labelledby", "shipment-success-title");
+
+    const dialog = document.createElement("div");
+    dialog.className = "dialog-box success";
+
+    const title = document.createElement("div");
+    title.id = "shipment-success-title";
+    title.className = "dialog-title";
+    title.textContent = "Success";
+
+    const message = document.createElement("div");
+    message.className = "dialog-message";
+    message.textContent = `Shipment ${created.tracking_id} created successfully.`;
+
+    const ok = document.createElement("button");
+    ok.type = "button";
+    ok.className = "dialog-button";
+    ok.textContent = "OK";
+    ok.addEventListener("click", async () => {
+      ok.disabled = true;
+      if (onCreated) await onCreated(created);
+      overlay.remove();
+      ui.setActiveSection(successSection);
+    });
+
+    dialog.append(title, message, ok);
+    overlay.append(dialog);
+    document.body.appendChild(overlay);
+    ok.focus();
   }
 
   function editShipmentAction(shipment) {
     if (shipment.status !== "pending") return "Locked";
 
-    const button = ui.makeButton("Edit", () => {
+    const button = ui.makeButton("Edit", async () => {
+      button.disabled = true;
+      const requestedDeviceOptions = await deviceOptions(shipment.device);
       const form = document.createElement("form");
       form.className = "shipment-form";
       form.innerHTML = `
         <label>Shipment number<input name="shipment_number" value="${escapeHtml(shipment.shipment_number)}" required></label>
         <label>Container number<input name="container_number" value="${escapeHtml(shipment.container_number)}" required></label>
-        <label>Route details<input name="route_details" value="${escapeHtml(shipment.route_details)}" required></label>
-        <label>Goods type<input name="goods_type" value="${escapeHtml(shipment.goods_type)}" required></label>
-        <label>Requested device<input name="device" value="${escapeHtml(shipment.device)}" required></label>
+        <label>Route details<select name="route_details" required>${selectOptions(SHIPMENT_ROUTES, shipment.route_details, "Select route")}</select></label>
+        <label>Goods type<select name="goods_type" required>${selectOptions(GOODS_TYPES, shipment.goods_type, "Select goods type")}</select></label>
+        <label>Requested device<select name="device" required>${requestedDeviceOptions}</select></label>
         <label>Expected delivery<input name="expected_delivery_date" type="datetime-local" value="${formatDateInputValue(shipment.expected_delivery_date)}" required></label>
         <label class="full-span">Description<textarea name="shipment_description" rows="3" required>${escapeHtml(shipment.shipment_description)}</textarea></label>
       `;
@@ -474,7 +543,6 @@ export function createDashboardViews({ api, ui }) {
       });
       form.append(save, message);
       ui.grid.appendChild(ui.panel(`Edit ${shipment.tracking_id}`, [form], "shipments"));
-      button.disabled = true;
     });
     return button;
   }
@@ -609,23 +677,29 @@ export function createDashboardViews({ api, ui }) {
     ui.setWelcome("user", dashboard.user);
     await renderUserOverview(dashboard.user);
     await renderMyShipments(dashboard.user);
-    renderShipmentForm();
+    await renderShipmentForm();
     renderProfile(dashboard.user);
   }
 
   async function renderAdmin(dashboard) {
     ui.setWelcome("admin", dashboard.user);
     const metrics = dashboard.metrics || {};
-    ui.grid.appendChild(ui.card("metric", "Users managed", metrics.users_managed ?? 0));
-    ui.grid.appendChild(ui.card("metric", "Devices monitored", metrics.devices_monitored ?? 0));
-    ui.grid.appendChild(ui.card("metric", "Shipments tracked", metrics.shipments_tracked ?? 0));
+    ui.setQuickStats([
+      { label: "Active users", value: metrics.active_users ?? 0 },
+      { label: "Pending shipments", value: metrics.pending_shipments ?? 0 },
+      { label: "Available devices", value: metrics.available_devices ?? 0 },
+      { label: "Today's deliveries", value: metrics.todays_deliveries ?? 0 },
+    ]);
+    ui.grid.appendChild(ui.card("metric metric-third", "Users managed", metrics.users_managed ?? 0));
+    ui.grid.appendChild(ui.card("metric metric-third", "Devices monitored", metrics.devices_monitored ?? 0));
+    ui.grid.appendChild(ui.card("metric metric-third", "Shipments tracked", metrics.shipments_tracked ?? 0));
 
     const usersResult = await loadList(api, "/api/admin/users");
     const devicesResult = await loadList(api, "/api/devices");
     const users = listItems(usersResult);
     const devices = listItems(devicesResult);
 
-    const usersError = ui.errorPanel("User roster status", usersResult, "overview");
+    const usersError = ui.errorPanel("User roster status", usersResult, "overview users");
     const devicesError = ui.errorPanel("Device inventory status", devicesResult, "devices");
     if (usersError) ui.grid.appendChild(usersError);
     if (devicesError) ui.grid.appendChild(devicesError);
@@ -638,8 +712,9 @@ export function createDashboardViews({ api, ui }) {
           "No users are currently registered.",
           DASHBOARD_TABLE_PAGE_SIZE
         ),
-      ])
+      ], "overview")
     );
+    ui.grid.appendChild(userManagementPanel(users, dashboard.user, false));
     ui.grid.appendChild(
       ui.panel("Device inventory", [
         ui.paginatedTable(
@@ -684,18 +759,22 @@ export function createDashboardViews({ api, ui }) {
     }
 
     await refreshAdminShipments();
+    await renderShipmentForm("operations", refreshAdminShipments);
     renderProfile(dashboard.user);
   }
 
-  function roleAction(user, currentUserId) {
+  function roleAction(user, currentUserId, roles = ["user", "admin", "super_admin"]) {
     if (user.id === currentUserId) {
+      return "Locked";
+    }
+    if (user.role === "super_admin" && !roles.includes("super_admin")) {
       return "Locked";
     }
 
     const wrapper = document.createElement("div");
     wrapper.className = "inline-actions role-actions";
     const select = document.createElement("select");
-    ["user", "admin", "super_admin"].forEach((role) => {
+    roles.forEach((role) => {
       const option = document.createElement("option");
       option.value = role;
       option.textContent = role.replace(/_/g, " ");
@@ -729,9 +808,253 @@ export function createDashboardViews({ api, ui }) {
     return wrapper;
   }
 
+  function deleteUserAction(user, currentUserId) {
+    if (user.id === currentUserId || user.role === "super_admin") {
+      return "Locked";
+    }
+
+    const remove = ui.makeButton("Delete", async () => {
+      if (!window.confirm(`Delete user ${user.email}?`)) return;
+      remove.disabled = true;
+      try {
+        await api(`/api/admin/users/${user.id}`, { method: "DELETE" });
+        remove.textContent = "Deleted";
+        window.setTimeout(() => window.location.reload(), 700);
+      } catch (error) {
+        remove.textContent = "Error";
+        window.setTimeout(() => {
+          remove.textContent = "Delete";
+        }, 1200);
+      } finally {
+        remove.disabled = false;
+      }
+    });
+    remove.classList.add("danger-action");
+    return remove;
+  }
+
+  function userManagementAction(user, currentUser, canDelete) {
+    const wrapper = document.createElement("div");
+    wrapper.className = "inline-actions user-management-actions";
+    const allowedRoles = canDelete ? ["user", "admin", "super_admin"] : ["user", "admin"];
+    const roleControl = roleAction(user, currentUser.id, allowedRoles);
+    const roleWrapper = document.createElement("span");
+    roleWrapper.append(roleControl);
+    wrapper.append(roleWrapper);
+    if (canDelete) {
+      const deleteControl = deleteUserAction(user, currentUser.id);
+      const deleteWrapper = document.createElement("span");
+      deleteWrapper.append(deleteControl);
+      wrapper.append(deleteWrapper);
+    }
+    return wrapper;
+  }
+
+  function userManagementRows(users, currentUser, canDelete) {
+    return users.map((user) => [
+      user.name,
+      user.email,
+      user.role,
+      user.is_active ? "active" : "inactive",
+      userManagementAction(user, currentUser, canDelete),
+    ]);
+  }
+
+  function userMatchesSearch(user, query) {
+    if (!query) return true;
+    const status = user.is_active ? "active" : "inactive";
+    return [user.name, user.email, user.role, status]
+      .some((value) => String(value || "").toLowerCase().includes(query));
+  }
+
+  function userManagementPanel(users, currentUser, canDelete) {
+    const contentHost = document.createElement("div");
+    const tabs = document.createElement("div");
+    tabs.className = "management-tabs";
+    tabs.setAttribute("role", "tablist");
+
+    const usersTab = makeManagementTab("Users", true);
+    const createTab = makeManagementTab("Create account", false);
+    tabs.append(usersTab, createTab);
+
+    const searchWrap = document.createElement("label");
+    searchWrap.className = "table-search-wrap";
+    const searchIcon = document.createElement("i");
+    searchIcon.className = "fa-solid fa-magnifying-glass";
+    searchIcon.setAttribute("aria-hidden", "true");
+    const search = document.createElement("input");
+    search.type = "search";
+    search.className = "table-search";
+    search.placeholder = "Search users by name, email, role, or status";
+    search.setAttribute("aria-label", "Search users");
+    searchWrap.append(searchIcon, search);
+
+    const tableHost = document.createElement("div");
+    tableHost.className = "search-results user-management-results";
+
+    function renderTable() {
+      const query = search.value.trim().toLowerCase();
+      const filteredUsers = users.filter((user) => userMatchesSearch(user, query));
+      tableHost.replaceChildren(
+        ui.paginatedTable(
+          ["Name", "Email", "Current role", "Status", "Action"],
+          userManagementRows(filteredUsers, currentUser, canDelete),
+          query ? "No users match your search." : "No users are currently available for management.",
+          USER_MANAGEMENT_TABLE_PAGE_SIZE
+        )
+      );
+    }
+
+    function setActiveTab(activeTab) {
+      [usersTab, createTab].forEach((tab) => {
+        const isActive = tab === activeTab;
+        tab.classList.toggle("active", isActive);
+        tab.setAttribute("aria-selected", String(isActive));
+      });
+    }
+
+    function showUserList() {
+      setActiveTab(usersTab);
+      contentHost.replaceChildren(searchWrap, tableHost);
+    }
+
+    function showCreateAccount() {
+      setActiveTab(createTab);
+      const form = buildCreateUserForm(canDelete, (createdUser) => {
+        users.unshift(createdUser);
+        renderTable();
+        showUserList();
+      });
+      const formPanel = createFormWrapper(form);
+      contentHost.replaceChildren(formPanel);
+    }
+
+    usersTab.addEventListener("click", showUserList);
+    createTab.addEventListener("click", showCreateAccount);
+    search.addEventListener("input", renderTable);
+    renderTable();
+    showUserList();
+    return ui.panel("User management", [tabs, contentHost], "users");
+  }
+
+  function makeManagementTab(label, active) {
+    const tab = document.createElement("button");
+    tab.type = "button";
+    tab.className = `management-tab${active ? " active" : ""}`;
+    tab.setAttribute("role", "tab");
+    tab.setAttribute("aria-selected", String(active));
+    tab.textContent = label;
+    return tab;
+  }
+
+  function buildCreateUserForm(canCreateSuperAdmin, onCreated) {
+    const form = document.createElement("form");
+    form.className = "create-user-form";
+    const roleOptions = canCreateSuperAdmin ? ["user", "admin", "super_admin"] : ["user", "admin"];
+    form.innerHTML = `
+      <label>Name<input name="name" required></label>
+      <label>Email<input name="email" type="email" required></label>
+      <label>Phone<input name="phone" inputmode="numeric" maxlength="10" pattern="[0-9]{10}" required></label>
+      <label>Role<select name="role">${roleOptions.map((role) => `<option value="${role}">${role.replace(/_/g, " ")}</option>`).join("")}</select></label>
+      <label class="full-span">Password<span class="password-generate-row"><input name="password" type="text" minlength="8" required><button type="button" class="action-button generate-password">Generate</button></span></label>
+    `;
+    const message = document.createElement("p");
+    message.className = "form-message";
+    let generatedPassword = "";
+    const passwordInput = form.elements.password;
+    const generate = form.querySelector(".generate-password");
+    generate.addEventListener("click", () => {
+      generatedPassword = generatePassword();
+      passwordInput.value = generatedPassword;
+      message.textContent = "Generated password filled. It will be shown once after account creation.";
+    });
+
+    const submit = ui.makeButton("Create account", async () => {
+      if (!form.reportValidity()) return;
+      const payload = Object.fromEntries(new FormData(form).entries());
+      const role = payload.role || "user";
+      const createdPassword = generatedPassword && generatedPassword === payload.password ? generatedPassword : "";
+      delete payload.role;
+      message.textContent = "";
+      submit.disabled = true;
+      try {
+        const created = await api("/api/users", {
+          method: "POST",
+          body: JSON.stringify(payload),
+        });
+        if (role !== "user" && created.id) {
+          await api(`/api/admin/users/${created.id}/role`, {
+            method: "PATCH",
+            body: JSON.stringify({ role }),
+          });
+        }
+        onCreated({
+          id: created.id,
+          name: payload.name,
+          email: created.email || payload.email,
+          role,
+          is_active: true,
+        });
+        form.reset();
+        generatedPassword = "";
+        message.textContent = createdPassword
+          ? `Account created for ${created.email}. Temporary password: ${createdPassword}`
+          : `Account created for ${created.email}.`;
+      } catch (error) {
+        message.textContent = error.message;
+      } finally {
+        submit.disabled = false;
+      }
+    });
+    const actions = document.createElement("div");
+    actions.className = "form-actions full-span";
+    actions.append(submit, message);
+    form.append(actions);
+    return form;
+  }
+
+  function generatePassword(length = 14) {
+    const groups = [
+      "ABCDEFGHJKLMNPQRSTUVWXYZ",
+      "abcdefghijkmnopqrstuvwxyz",
+      "23456789",
+      "!@#$%&*?",
+    ];
+    const allChars = groups.join("");
+    const bytes = new Uint32Array(length);
+    window.crypto.getRandomValues(bytes);
+    const password = groups.map((group, index) => group[bytes[index] % group.length]);
+    for (let index = password.length; index < length; index += 1) {
+      password.push(allChars[bytes[index] % allChars.length]);
+    }
+    return password
+      .map((char, index, list) => {
+        const swapIndex = bytes[index] % list.length;
+        const swapped = list[swapIndex];
+        list[swapIndex] = char;
+        return swapped;
+      })
+      .join("");
+  }
+
+  function createFormWrapper(form) {
+    const wrapper = document.createElement("div");
+    wrapper.className = "create-user-panel";
+    const heading = document.createElement("h4");
+    heading.textContent = "Create account";
+    wrapper.append(heading, form);
+    return wrapper;
+  }
+
   async function renderSuperAdmin(dashboard) {
     ui.setWelcome("super_admin", dashboard.user);
     const metrics = dashboard.metrics || {};
+    ui.setQuickStats([
+      { label: "Active users", value: metrics.active_users ?? 0 },
+      { label: "Pending shipments", value: metrics.pending_shipments ?? 0 },
+      { label: "Available devices", value: metrics.available_devices ?? 0 },
+      { label: "Today's deliveries", value: metrics.todays_deliveries ?? 0 },
+    ]);
     ui.grid.appendChild(ui.card("metric", "Total users", metrics.total_users ?? 0));
     ui.grid.appendChild(ui.card("metric", "Admin count", metrics.admin_count ?? 0));
     ui.grid.appendChild(ui.card("metric", "Active users", metrics.active_users ?? 0));
@@ -759,18 +1082,9 @@ export function createDashboardViews({ api, ui }) {
 
     const usersResult = await loadList(api, "/api/admin/users");
     const users = listItems(usersResult);
-    const usersError = ui.errorPanel("Role governance status", usersResult, "governance");
-    if (usersError) ui.grid.appendChild(usersError);
-    ui.grid.appendChild(
-      ui.panel("Role governance", [
-        ui.paginatedTable(
-          ["Name", "Email", "Current role", "Action"],
-          users.map((user) => [user.name, user.email, user.role, roleAction(user, dashboard.user.id)]),
-          "No users are currently available for role governance.",
-          GOVERNANCE_TABLE_PAGE_SIZE
-        ),
-      ], "governance")
-    );
+    const userManagementError = ui.errorPanel("User management status", usersResult, "users");
+    if (userManagementError) ui.grid.appendChild(userManagementError);
+    ui.grid.appendChild(userManagementPanel(users, dashboard.user, true));
 
     ui.grid.appendChild(ui.panel("System health", [systemHealthPanel()], "health"));
     renderProfile(dashboard.user);

@@ -5,29 +5,59 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Sign Up | SCMXpertLite</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Hermeneus+One&family=Cormorant+Garamond:wght@600&family=Rye&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" crossorigin="anonymous" referrerpolicy="no-referrer" />
-  <link id="theme-stylesheet" rel="stylesheet" href="/css/signup.css" data-light-href="/css/signup.css" data-dark-href="/css/signup-dark.css">
+  <link rel="stylesheet" href="/css/signup.css?v=title-route-clear-20260608-1">
 </head>
 
 <body>
   <div class="auth-container">
-    <div class="brand-row outside-brand">
-      <span class="brand-dot" aria-hidden="true"></span>
-      <span class="brand-name">SCMXpertLite</span>
-    </div>
     <div class="card">
-      <button type="button" id="theme-toggle" class="theme-toggle" aria-label="Toggle theme">Dark Mode</button>
-      <div class="card-body">
-        <h2 class="card-title">Create Account</h2>
-        <p class="card-subtitle">Create your SCMXpertLite workspace access.</p>
+      <div class="brand-row">
+        <img class="brand-logo" src="/assets/exf-logo.png" alt="EXF" />
+        <span class="brand-name">SCMXpertLite</span>
+      </div>
+      <div class="signup-layout">
+        <section class="signup-art" aria-hidden="true">
+          <div class="art-copy">
+            <p>Welcome to</p>
+            <h1>SCMXpertLite</h1>
+            <span>Smart shipment access for routes, devices, and containers.</span>
+          </div>
+          <div class="orbit-card orbit-card-one">
+            <i class="fa-solid fa-box"></i>
+          </div>
+          <div class="orbit-card orbit-card-two">
+            <i class="fa-solid fa-truck-fast"></i>
+          </div>
+          <div class="logistics-scene">
+            <div class="container-box">
+              <div class="container-lines">
+                <span></span><span></span><span></span><span></span>
+              </div>
+              <div class="tracking-badge">
+                <i class="fa-solid fa-location-dot"></i>
+                <span>SCM-TRACK</span>
+              </div>
+            </div>
+            <div class="mini-truck">
+              <i class="fa-solid fa-truck-fast"></i>
+              <span></span>
+            </div>
+          </div>
+          <div class="route-line"></div>
+          <div class="route-dot dot-one"></div>
+          <div class="route-dot dot-two"></div>
+          <div class="route-dot dot-three"></div>
+        </section>
 
-        <form id="signupForm" novalidate>
+        <section class="card-body" aria-label="Create account form">
+          <h2 class="card-title">Create Account</h2>
+          <p class="card-subtitle">Already have an account? <a href="/login">Log in</a></p>
+
+          <form id="signupForm" novalidate>
           <div class="form-group">
             <label for="name">FULL NAME</label>
-            <input type="text" id="name" class="form-control" placeholder="Your name" autocomplete="name" maxlength="80" aria-describedby="name-error" required />
+            <input type="text" id="name" class="form-control" placeholder="Example: Megha Sharma" autocomplete="name" maxlength="80" aria-describedby="name-error" required />
             <p id="name-error" class="field-error"></p>
           </div>
           <div class="form-group">
@@ -81,16 +111,12 @@
           </button>
         </form>
 
-        <p class="login-link">
-          Already have an account? <a href="/login">Log in</a>
-        </p>
-
         <div id="msg" class="message" aria-live="polite"></div>
         <div id="success-panel" class="success-panel" aria-live="polite"></div>
+        </section>
       </div>
     </div>
   </div>
-  <script src="/javascript/theme-toggle.js"></script>
   <script src="/javascript/signup.js"></script>
 </body>
 
