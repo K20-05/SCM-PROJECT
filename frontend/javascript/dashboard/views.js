@@ -1,5 +1,5 @@
 import { listItems, loadList } from "./api.js";
-import { escapeHtml, formatDateInputValue, formatDateTime, normalizeRole } from "./format.js";
+import { escapeHtml, formatDateInputValue, formatDateTime, formatLabel, normalizeRole } from "./format.js";
 
 const SHIPMENT_STATUSES = ["pending", "in_transit", "out_for_delivery", "delivered", "cancelled"];
 const SHIPMENT_ROUTES = [
@@ -41,6 +41,127 @@ export function createDashboardViews({ api, ui }) {
 
   function statusCount(shipments, status) {
     return shipments.filter((shipment) => shipment.status === status).length;
+  }
+
+  function countBy(items, key, fallback = "unknown") {
+    return items.reduce((counts, item) => {
+      const value = String(item?.[key] || fallback).toLowerCase();
+      counts[value] = (counts[value] || 0) + 1;
+      return counts;
+    }, {});
+  }
+
+  function chartDatasetFromCounts(counts, order = []) {
+    const keys = [...new Set([...order, ...Object.keys(counts)])];
+    return keys
+      .map((key) => ({
+        label: formatLabel(key),
+        value: Number(counts[key] || 0),
+      }))
+      .filter((item) => item.value > 0);
+  }
+
+  function chartPanel(title, charts, sectionName = "overview") {
+    const layout = document.createElement("div");
+    layout.className = "chart-layout";
+    charts.forEach((chart) => layout.appendChild(chart));
+    return ui.panel(title, [layout], sectionName);
+  }
+
+  function pieChart(title, data) {
+    const total = data.reduce((sum, item) => sum + item.value, 0);
+    const chart = document.createElement("article");
+    chart.className = "chart-box pie-chart-box";
+
+    const heading = document.createElement("h4");
+    heading.textContent = title;
+
+    const body = document.createElement("div");
+    body.className = "pie-chart-body";
+
+    const pie = document.createElement("div");
+    pie.className = "pie-chart";
+    pie.setAttribute("role", "img");
+    pie.setAttribute("aria-label", `${title}: ${total || 0} total`);
+
+    if (total > 0) {
+      let cursor = 0;
+      const colors = ["#0f766e", "#ca8a04", "#15803d", "#dc2626", "#64748b", "#2563eb"];
+      const segments = data.map((item, index) => {
+        const start = cursor;
+        const end = cursor + (item.value / total) * 100;
+        cursor = end;
+        return `${colors[index % colors.length]} ${start}% ${end}%`;
+      });
+      pie.style.background = `conic-gradient(${segments.join(", ")})`;
+    }
+
+    const totalLabel = document.createElement("span");
+    totalLabel.className = "pie-total";
+    totalLabel.innerHTML = `<strong>${total}</strong><span>Total</span>`;
+    pie.appendChild(totalLabel);
+
+    const legend = chartLegend(data);
+    body.append(pie, legend);
+    chart.append(heading, body);
+    return chart;
+  }
+
+  function barChart(title, data) {
+    const max = Math.max(1, ...data.map((item) => item.value));
+    const chart = document.createElement("article");
+    chart.className = "chart-box bar-chart-box";
+
+    const heading = document.createElement("h4");
+    heading.textContent = title;
+    const bars = document.createElement("div");
+    bars.className = "bar-chart";
+
+    data.forEach((item) => {
+      const row = document.createElement("div");
+      row.className = "bar-row";
+      const label = document.createElement("span");
+      label.className = "bar-label";
+      label.textContent = item.label;
+      const track = document.createElement("span");
+      track.className = "bar-track";
+      const fill = document.createElement("span");
+      fill.className = "bar-fill";
+      fill.style.width = `${Math.max(8, (item.value / max) * 100)}%`;
+      track.appendChild(fill);
+      const value = document.createElement("strong");
+      value.textContent = item.value;
+      row.append(label, track, value);
+      bars.appendChild(row);
+    });
+
+    if (!data.length) {
+      const empty = document.createElement("p");
+      empty.className = "empty-state";
+      empty.textContent = "No chart data available.";
+      bars.appendChild(empty);
+    }
+
+    chart.append(heading, bars);
+    return chart;
+  }
+
+  function chartLegend(data) {
+    const legend = document.createElement("div");
+    legend.className = "chart-legend";
+    data.forEach((item, index) => {
+      const row = document.createElement("span");
+      row.style.setProperty("--legend-color", ["#0f766e", "#ca8a04", "#15803d", "#dc2626", "#64748b", "#2563eb"][index % 6]);
+      row.innerHTML = `<strong>${escapeHtml(item.label)}</strong>${item.value}`;
+      legend.appendChild(row);
+    });
+    if (!data.length) {
+      const empty = document.createElement("p");
+      empty.className = "empty-state";
+      empty.textContent = "No chart data available.";
+      legend.appendChild(empty);
+    }
+    return legend;
   }
 
   function ownedShipments(result, user) {
@@ -211,7 +332,23 @@ export function createDashboardViews({ api, ui }) {
     ui.grid.appendChild(ui.card("metric", "Pending", statusCount(shipments, "pending")));
     ui.grid.appendChild(ui.card("metric", "In transit", statusCount(shipments, "in_transit")));
     ui.grid.appendChild(ui.card("metric", "Delivered", statusCount(shipments, "delivered")));
-    ui.grid.appendChild(ui.card("metric", "Upcoming deliveries", upcoming.length));
+    ui.grid.appendChild(
+      chartPanel("My shipment charts", [
+        pieChart(
+          "Shipment status",
+          chartDatasetFromCounts(countBy(shipments, "status"), SHIPMENT_STATUSES)
+        ),
+        barChart(
+          "Delivery workload",
+          [
+            { label: "Upcoming", value: upcoming.length },
+            { label: "Pending", value: statusCount(shipments, "pending") },
+            { label: "In transit", value: statusCount(shipments, "in_transit") },
+            { label: "Delivered", value: statusCount(shipments, "delivered") },
+          ]
+        ),
+      ])
+    );
 
     ui.grid.appendChild(
       ui.panel("Upcoming deliveries", [
@@ -247,12 +384,32 @@ export function createDashboardViews({ api, ui }) {
   }
 
   function renderProfile(user) {
+    const profileHeader = document.createElement("section");
+    profileHeader.className = "profile-identity";
+    const initial = String(user.name || user.email || "U").trim().charAt(0).toUpperCase() || "U";
+    profileHeader.innerHTML = `
+      <div class="profile-avatar">${escapeHtml(initial)}</div>
+      <div class="profile-summary">
+        <span class="profile-kicker">Account console</span>
+        <h3>${escapeHtml(user.name || "User")}</h3>
+        <div class="profile-badges">
+          <span class="badge badge-admin">${escapeHtml(formatLabel(user.role))}</span>
+          <span class="badge badge-active">Active</span>
+        </div>
+      </div>
+      <div class="profile-chips">
+        <span><i class="fa-solid fa-envelope" aria-hidden="true"></i>${escapeHtml(user.email || "-")}</span>
+        <span><i class="fa-solid fa-phone" aria-hidden="true"></i>${escapeHtml(user.phone || "-")}</span>
+      </div>
+    `;
+
     const form = document.createElement("form");
     form.className = "stack-form";
     form.innerHTML = `
-      <label>Name<input name="name" value="${escapeHtml(user.name)}" required></label>
-      <label>Email<input name="email" value="${escapeHtml(user.email)}" readonly></label>
-      <label>Phone<input name="phone" value="${escapeHtml(user.phone)}" required></label>
+      <p class="profile-helper">Keep your SCMXpertLite account details up to date.</p>
+      <label><span><i class="fa-solid fa-user" aria-hidden="true"></i>Name</span><input name="name" value="${escapeHtml(user.name)}" required></label>
+      <label><span><i class="fa-solid fa-envelope" aria-hidden="true"></i>Email</span><input name="email" value="${escapeHtml(user.email)}" readonly></label>
+      <label><span><i class="fa-solid fa-phone" aria-hidden="true"></i>Phone</span><input name="phone" value="${escapeHtml(user.phone)}" required></label>
     `;
     const message = document.createElement("p");
     const save = ui.makeButton("Save profile", async () => {
@@ -284,7 +441,7 @@ export function createDashboardViews({ api, ui }) {
     layout.className = "profile-layout";
     layout.append(profileDetails, buildPasswordForm());
 
-    ui.grid.appendChild(ui.panel("Profile", [layout], "profile"));
+    ui.grid.appendChild(ui.panel("Profile", [profileHeader, layout], "profile"));
   }
 
   function buildPasswordForm() {
@@ -296,9 +453,10 @@ export function createDashboardViews({ api, ui }) {
     const form = document.createElement("form");
     form.className = "stack-form";
     form.innerHTML = `
-      <label>Current password<input name="old_password" type="password" required></label>
-      <label>New password<input name="new_password" type="password" required></label>
-      <label>Confirm password<input name="confirm_new_password" type="password" required></label>
+      <p class="profile-helper">Update your password regularly to protect shipment access.</p>
+      <label><span><i class="fa-solid fa-lock" aria-hidden="true"></i>Current password</span><input name="old_password" type="password" required></label>
+      <label><span><i class="fa-solid fa-key" aria-hidden="true"></i>New password</span><input name="new_password" type="password" required></label>
+      <label><span><i class="fa-solid fa-shield-halved" aria-hidden="true"></i>Confirm password</span><input name="confirm_new_password" type="password" required></label>
     `;
     const message = document.createElement("p");
     const submit = ui.makeButton("Update password", async () => {
@@ -426,7 +584,7 @@ export function createDashboardViews({ api, ui }) {
     return selectOptions(options, selectedValue, "Select requested device");
   }
 
-  async function renderShipmentForm(successSection = "shipments", onCreated = null) {
+  async function renderShipmentForm(successSection = "shipments", onCreated = null, formSection = "new-shipment") {
     const requestedDeviceOptions = await deviceOptions();
     const form = document.createElement("form");
     form.className = "shipment-form";
@@ -468,7 +626,7 @@ export function createDashboardViews({ api, ui }) {
     actions.className = "form-actions full-span";
     actions.append(submit, message);
     form.append(actions);
-    ui.grid.appendChild(ui.panel("New shipment", [form], "new-shipment"));
+    ui.grid.appendChild(ui.panel("New shipment", [form], formSection));
   }
 
   function showShipmentSuccessDialog(created, successSection, onCreated) {
@@ -651,9 +809,9 @@ export function createDashboardViews({ api, ui }) {
       const error = ui.errorPanel("My shipments status", result, "shipments");
       if (error) children.push(error);
 
-      children.push(ui.card("metric", "My shipments", shipments.length, "shipments"));
-      children.push(ui.card("metric", "Pending", shipments.filter((shipment) => shipment.status === "pending").length, "shipments"));
-      children.push(ui.card("metric", "Delivered", shipments.filter((shipment) => shipment.status === "delivered").length, "shipments"));
+      children.push(ui.card("metric metric-third", "My shipments", shipments.length, "shipments"));
+      children.push(ui.card("metric metric-third", "Pending", shipments.filter((shipment) => shipment.status === "pending").length, "shipments"));
+      children.push(ui.card("metric metric-third", "Delivered", shipments.filter((shipment) => shipment.status === "delivered").length, "shipments"));
       children.push(
         ui.panel("My shipments", [
           ui.paginatedTable(
@@ -684,25 +842,36 @@ export function createDashboardViews({ api, ui }) {
   async function renderAdmin(dashboard) {
     ui.setWelcome("admin", dashboard.user);
     const metrics = dashboard.metrics || {};
-    ui.setQuickStats([
-      { label: "Active users", value: metrics.active_users ?? 0 },
-      { label: "Pending shipments", value: metrics.pending_shipments ?? 0 },
-      { label: "Available devices", value: metrics.available_devices ?? 0 },
-      { label: "Today's deliveries", value: metrics.todays_deliveries ?? 0 },
-    ]);
-    ui.grid.appendChild(ui.card("metric metric-third", "Users managed", metrics.users_managed ?? 0));
-    ui.grid.appendChild(ui.card("metric metric-third", "Devices monitored", metrics.devices_monitored ?? 0));
-    ui.grid.appendChild(ui.card("metric metric-third", "Shipments tracked", metrics.shipments_tracked ?? 0));
-
     const usersResult = await loadList(api, "/api/admin/users");
     const devicesResult = await loadList(api, "/api/devices");
+    const shipmentsResult = await loadList(api, "/api/shipments");
     const users = listItems(usersResult);
     const devices = listItems(devicesResult);
+    const shipments = listItems(shipmentsResult);
 
     const usersError = ui.errorPanel("User roster status", usersResult, "overview users");
     const devicesError = ui.errorPanel("Device inventory status", devicesResult, "devices");
+    const shipmentsError = ui.errorPanel("Shipment chart status", shipmentsResult, "overview operations");
     if (usersError) ui.grid.appendChild(usersError);
     if (devicesError) ui.grid.appendChild(devicesError);
+    if (shipmentsError) ui.grid.appendChild(shipmentsError);
+
+    ui.grid.appendChild(
+      chartPanel("Operations charts", [
+        pieChart(
+          "Shipment status",
+          chartDatasetFromCounts(countBy(shipments, "status"), SHIPMENT_STATUSES)
+        ),
+        barChart(
+          "Device status",
+          chartDatasetFromCounts(countBy(devices, "status"), ["available", "assigned", "active", "inactive", "maintenance"])
+        ),
+        barChart(
+          "User access",
+          chartDatasetFromCounts(countBy(users, "role"), ["user", "admin", "super_admin"])
+        ),
+      ], "overview")
+    );
 
     ui.grid.appendChild(
       ui.panel("User roster", [
@@ -715,19 +884,11 @@ export function createDashboardViews({ api, ui }) {
       ], "overview")
     );
     ui.grid.appendChild(userManagementPanel(users, dashboard.user, false));
-    ui.grid.appendChild(
-      ui.panel("Device inventory", [
-        ui.paginatedTable(
-          ["Device ID", "Status", "Route"],
-          devices.map((device) => [device.device_id, device.status, `${device.route_from || "-"} to ${device.route_to || "-"}`]),
-          "No devices are currently registered.",
-          DASHBOARD_TABLE_PAGE_SIZE
-        ),
-      ], "devices")
-    );
+    ui.grid.appendChild(deviceDataStreamPanel(devices));
     const shipmentHost = document.createElement("div");
     shipmentHost.className = "section-stack";
     shipmentHost.setAttribute("data-view-section", "operations");
+    await renderShipmentForm("operations", refreshAdminShipments, "operations");
     ui.grid.appendChild(buildShipmentFilterForm("operations", refreshAdminShipments));
     ui.grid.appendChild(shipmentHost);
 
@@ -759,7 +920,6 @@ export function createDashboardViews({ api, ui }) {
     }
 
     await refreshAdminShipments();
-    await renderShipmentForm("operations", refreshAdminShipments);
     renderProfile(dashboard.user);
   }
 
@@ -858,6 +1018,24 @@ export function createDashboardViews({ api, ui }) {
       user.is_active ? "active" : "inactive",
       userManagementAction(user, currentUser, canDelete),
     ]);
+  }
+
+  function deviceDataStreamPanel(devices, sectionName = "devices") {
+    return ui.panel("Device data stream", [
+      ui.paginatedTable(
+        ["Device ID", "Battery level", "First sensor temperature", "Route from", "Route to", "Timestamp"],
+        devices.map((device) => [
+          device.device_id,
+          device.battery_level ?? "-",
+          device.first_sensor_temperature || "-",
+          device.route_from || "-",
+          device.route_to || "-",
+          formatDateTime(device.timestamp),
+        ]),
+        "No device data is currently available.",
+        DASHBOARD_TABLE_PAGE_SIZE
+      ),
+    ], sectionName);
   }
 
   function userMatchesSearch(user, query) {
@@ -1081,10 +1259,77 @@ export function createDashboardViews({ api, ui }) {
     );
 
     const usersResult = await loadList(api, "/api/admin/users");
+    const devicesResult = await loadList(api, "/api/devices");
+    const shipmentsResult = await loadList(api, "/api/shipments");
     const users = listItems(usersResult);
+    const devices = listItems(devicesResult);
+    const shipments = listItems(shipmentsResult);
     const userManagementError = ui.errorPanel("User management status", usersResult, "users");
+    const devicesError = ui.errorPanel("Device data stream status", devicesResult, "devices");
+    const shipmentsError = ui.errorPanel("Shipment chart status", shipmentsResult, "overview");
     if (userManagementError) ui.grid.appendChild(userManagementError);
+    if (devicesError) ui.grid.appendChild(devicesError);
+    if (shipmentsError) ui.grid.appendChild(shipmentsError);
+    ui.grid.appendChild(
+      chartPanel("Governance charts", [
+        pieChart(
+          "User roles",
+          chartDatasetFromCounts(countBy(users, "role"), ["user", "admin", "super_admin"])
+        ),
+        pieChart(
+          "User status",
+          [
+            { label: "Active", value: metrics.active_users ?? users.filter((user) => user.is_active).length },
+            { label: "Inactive", value: metrics.inactive_users ?? users.filter((user) => !user.is_active).length },
+          ].filter((item) => item.value > 0)
+        ),
+        barChart(
+          "Shipment status",
+          chartDatasetFromCounts(countBy(shipments, "status"), SHIPMENT_STATUSES)
+        ),
+        barChart(
+          "Device status",
+          chartDatasetFromCounts(countBy(devices, "status"), ["available", "assigned", "active", "inactive", "maintenance"])
+        ),
+      ], "overview")
+    );
     ui.grid.appendChild(userManagementPanel(users, dashboard.user, true));
+    ui.grid.appendChild(deviceDataStreamPanel(devices));
+    const shipmentHost = document.createElement("div");
+    shipmentHost.className = "section-stack";
+    shipmentHost.setAttribute("data-view-section", "operations");
+    await renderShipmentForm("operations", refreshSuperAdminShipments, "operations");
+    ui.grid.appendChild(buildShipmentFilterForm("operations", refreshSuperAdminShipments));
+    ui.grid.appendChild(shipmentHost);
+
+    async function refreshSuperAdminShipments(path = "/api/shipments") {
+      const shipmentsResult = await loadList(api, path);
+      const shipments = listItems(shipmentsResult);
+      const children = [];
+      const shipmentsError = ui.errorPanel("Shipment queue status", shipmentsResult, "operations");
+      if (shipmentsError) children.push(shipmentsError);
+      children.push(
+        ui.panel("Shipment queue", [
+          ui.paginatedTable(
+            ["Tracking ID", "Container", "Route", "Device", "Status", "Status update", "Actions"],
+            shipments.map((shipment) => [
+              shipment.tracking_id,
+              shipment.container_number,
+              shipment.route_details,
+              shipment.device_id || shipment.device,
+              shipment.status,
+              adminStatusAction(shipment),
+              adminShipmentActions(shipment, refreshSuperAdminShipments),
+            ]),
+            "No shipments are currently tracked.",
+            DASHBOARD_TABLE_PAGE_SIZE
+          ),
+        ], "operations")
+      );
+      shipmentHost.replaceChildren(...children);
+    }
+
+    await refreshSuperAdminShipments();
 
     ui.grid.appendChild(ui.panel("System health", [systemHealthPanel()], "health"));
     renderProfile(dashboard.user);

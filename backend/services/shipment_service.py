@@ -10,6 +10,8 @@ from backend.database.mongo import get_devices_collection, get_shipments_collect
 from backend.models.device_model import DeviceAssignRequest, DeviceStatus
 from backend.models.shipment_model import ShipmentCreate, ShipmentOut, ShipmentStatus, ShipmentUpdate
 
+TERMINAL_SHIPMENT_STATUSES = {ShipmentStatus.CANCELLED.value, ShipmentStatus.DELIVERED.value}
+
 
 class ShipmentFilters:
     def __init__(
@@ -55,6 +57,18 @@ def _to_shipment_out(document: dict) -> ShipmentOut:
         owner_id=str(document["owner_id"]),
         device_id=document.get("device_id"),
         created_at=document["created_at"],
+    )
+
+
+async def _release_assigned_device(device_id: str | None) -> None:
+    if not device_id:
+        return
+    await get_devices_collection().update_one(
+        {
+            "device_id": device_id,
+            "status": {"$in": [DeviceStatus.ASSIGNED.value, DeviceStatus.ACTIVE.value]},
+        },
+        {"$set": {"status": DeviceStatus.AVAILABLE.value, "updated_at": datetime.now(timezone.utc)}},
     )
 
 
@@ -124,7 +138,7 @@ async def update_shipment(tracking_id: str, payload: ShipmentUpdate, current_use
 
     shipment = await get_shipments_collection().find_one(
         {**_shipment_identity_filter(tracking_id), "is_deleted": {"$ne": True}},
-        {"_id": 0, "owner_id": 1},
+        {"_id": 0, "owner_id": 1, "device_id": 1},
     )
     if not shipment:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Shipment not found")
@@ -136,6 +150,9 @@ async def update_shipment(tracking_id: str, payload: ShipmentUpdate, current_use
     if "status" in update_data and not is_admin:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only admins can change shipment status")
 
+    should_release_device = update_data.get("status") in TERMINAL_SHIPMENT_STATUSES and shipment.get("device_id")
+    if should_release_device:
+        update_data["device_id"] = None
     update_data["updated_at"] = datetime.now(timezone.utc)
     updated = await get_shipments_collection().find_one_and_update(
         {**_shipment_identity_filter(tracking_id), "is_deleted": {"$ne": True}},
@@ -145,6 +162,8 @@ async def update_shipment(tracking_id: str, payload: ShipmentUpdate, current_use
     )
     if not updated:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Shipment not found")
+    if should_release_device:
+        await _release_assigned_device(str(shipment.get("device_id")))
     return _to_shipment_out(updated)
 
 
@@ -156,6 +175,7 @@ async def delete_shipment(tracking_id: str) -> None:
     )
     if not updated:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Shipment not found")
+    await _release_assigned_device(updated.get("device_id"))
 
 
 async def assign_device_to_shipment(tracking_id: str, payload: DeviceAssignRequest) -> ShipmentOut:

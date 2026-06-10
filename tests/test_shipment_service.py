@@ -27,12 +27,14 @@ class _FakeShipmentsCollection:
         rows = [doc for doc in self.docs if doc.get("is_deleted") is not True]
         return _FakeCursor(rows)
 
-    async def find_one(self, query: dict):
+    async def find_one(self, query: dict, projection: dict | None = None):
         for doc in self.docs:
             if doc.get("is_deleted") is True:
                 continue
             if not _matches_identity(query.get("$or", []), doc):
                 continue
+            if projection:
+                return {key: doc[key] for key, include in projection.items() if include and key in doc}
             return dict(doc)
         return None
 
@@ -40,7 +42,7 @@ class _FakeShipmentsCollection:
         for idx, doc in enumerate(self.docs):
             if query.get("is_deleted", {}).get("$ne") is True and doc.get("is_deleted") is True:
                 continue
-            if query.get("device_id") is None and doc.get("device_id") is not None:
+            if "device_id" in query and query.get("device_id") is None and doc.get("device_id") is not None:
                 continue
             if not _matches_identity(query.get("$or", []), doc):
                 continue
@@ -89,6 +91,12 @@ class _FakeDevicesCollection:
     async def update_one(self, query: dict, update: dict):
         for idx, doc in enumerate(self.docs):
             if doc.get("device_id") == query.get("device_id"):
+                expected_status = query.get("status")
+                if isinstance(expected_status, dict) and "$in" in expected_status:
+                    if doc.get("status") not in expected_status["$in"]:
+                        continue
+                elif expected_status and doc.get("status") != expected_status:
+                    continue
                 self.docs[idx] = {**doc, **update.get("$set", {})}
                 break
 
@@ -112,7 +120,7 @@ def _shipment_doc(tracking_id: str, *, deleted: bool = False, device_id: str | N
         "goods_type": "Medicines",
         "device": "DEV-1",
         "expected_delivery_date": datetime(2026, 5, 20, 10, 30, tzinfo=timezone.utc),
-        "po_number": "PO-1",
+        "ph_number": "PH-1",
         "delivery_number": "DEL-1",
         "ndc_number": "NDC-1",
         "batch_id": "BATCH-1",
@@ -146,6 +154,35 @@ def test_delete_shipment_by_object_id_works(monkeypatch):
 
     assert len(shipments.docs) == 1
     assert shipments.docs[0]["is_deleted"] is True
+
+
+def test_delete_shipment_releases_assigned_device(monkeypatch):
+    shipments = _FakeShipmentsCollection([_shipment_doc("SCM-REL0001", device_id="DEV-1")])
+    devices = _FakeDevicesCollection([{"device_id": "DEV-1", "status": DeviceStatus.ASSIGNED.value}])
+    monkeypatch.setattr(shipment_service, "get_shipments_collection", lambda: shipments)
+    monkeypatch.setattr(shipment_service, "get_devices_collection", lambda: devices)
+
+    asyncio.run(shipment_service.delete_shipment("SCM-REL0001"))
+
+    assert devices.docs[0]["status"] == DeviceStatus.AVAILABLE.value
+
+
+def test_delivered_shipment_releases_assigned_device(monkeypatch):
+    shipments = _FakeShipmentsCollection([_shipment_doc("SCM-DLV0001", device_id="DEV-1")])
+    devices = _FakeDevicesCollection([{"device_id": "DEV-1", "status": DeviceStatus.ACTIVE.value}])
+    monkeypatch.setattr(shipment_service, "get_shipments_collection", lambda: shipments)
+    monkeypatch.setattr(shipment_service, "get_devices_collection", lambda: devices)
+
+    result = asyncio.run(
+        shipment_service.update_shipment(
+            "SCM-DLV0001",
+            ShipmentUpdate(status=ShipmentStatus.DELIVERED),
+            {"_id": "admin-1", "role": "admin"},
+        )
+    )
+
+    assert result.device_id is None
+    assert devices.docs[0]["status"] == DeviceStatus.AVAILABLE.value
 
 
 def test_update_shipment_without_payload_returns_400():

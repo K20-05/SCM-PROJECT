@@ -220,13 +220,28 @@ async function initCaptcha() {
 }
 
 function loadGoogleCaptcha(siteKey) {
+  googleCaptcha.hidden = false;
+  localCaptcha.hidden = true;
+
   window.renderLoginCaptcha = () => {
+    if (recaptchaWidgetId !== null) return;
     recaptchaWidgetId = window.grecaptcha.render("google-captcha", { sitekey: siteKey });
   };
+
+  if (window.grecaptcha?.render) {
+    window.renderLoginCaptcha();
+    return;
+  }
+  if (document.getElementById("recaptcha-api-script")) return;
+
   const script = document.createElement("script");
+  script.id = "recaptcha-api-script";
   script.src = "https://www.google.com/recaptcha/api.js?onload=renderLoginCaptcha&render=explicit";
   script.async = true;
   script.defer = true;
+  script.onerror = () => {
+    captchaError.textContent = "Could not load Google reCAPTCHA. Please refresh and try again.";
+  };
   document.head.appendChild(script);
 }
 

@@ -36,6 +36,14 @@ SCMXPertLite is a lightweight shipment tracking platform with role-based user ac
    - `LOGINS_COLLECTION_NAME`
    - `SENSOR_DATA_COLLECTION_NAME`
    - `SHIPMENTS_COLLECTION_NAME`
+4. To use Google reCAPTCHA on the login page, create a reCAPTCHA v2 checkbox site in Google reCAPTCHA Admin and add:
+   - `RECAPTCHA_SITE_KEY`
+   - `RECAPTCHA_SECRET_KEY`
+   If either value is missing, the app falls back to the built-in local math CAPTCHA.
 
 ## Run
 - `python main.py`
+
+## Production Notes
+- The built-in authentication rate limiter is process-local. For multi-worker or deployed production use, replace it with a shared store such as Redis so limits apply consistently across instances.
+- Static frontend files currently use manual query-string cache versions. For production builds, use a single release/version value or hashed asset filenames so browser cache busting is predictable.

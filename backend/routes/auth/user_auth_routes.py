@@ -35,14 +35,20 @@ async def login(request: Request):
     if "application/x-www-form-urlencoded" in content_type or "multipart/form-data" in content_type:
         form = await request.form()
         # Swagger OAuth2 password flow sends username/password.
-        email = str(form.get("username", "")).strip()
-        password = str(form.get("password", ""))
+        data = {
+            "email": str(form.get("username") or form.get("email") or "").strip(),
+            "password": str(form.get("password") or ""),
+            "recaptcha_token": form.get("recaptcha_token"),
+            "captcha_id": form.get("captcha_id"),
+            "captcha_answer": form.get("captcha_answer"),
+        }
     else:
         data = await request.json()
-        payload = UserLogin.model_validate(data)
-        await verify_login_captcha(data, request)
-        email = payload.email
-        password = payload.password
+
+    payload = UserLogin.model_validate(data)
+    await verify_login_captcha(data, request)
+    email = payload.email
+    password = payload.password
 
     return await login_user(email, password)
 

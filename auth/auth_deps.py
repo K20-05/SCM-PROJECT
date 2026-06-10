@@ -7,7 +7,7 @@ from auth.auth_config import settings
 from backend.database.mongo import get_users_collection
 
 
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/user/token")
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/auth/login")
 
 
 async def get_current_user(token: str = Depends(oauth2_scheme)) -> dict:
