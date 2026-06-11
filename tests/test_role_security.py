@@ -2,6 +2,7 @@ import asyncio
 
 from bson import ObjectId
 from fastapi import HTTPException, status
+from pymongo.errors import PyMongoError
 
 from backend.models.auth_models import UserRole, UserRoleUpdate
 from backend.routes.auth import user_auth_routes
@@ -14,6 +15,11 @@ class _FakeUsersCollection:
 
     async def find_one(self, query: dict, projection: dict | None = None):
         return self.user
+
+
+class _FailingUsersCollection:
+    async def find_one(self, query: dict, projection: dict | None = None):
+        raise PyMongoError("database unavailable")
 
 
 class _FakeRoleUsersCollection:
@@ -55,6 +61,20 @@ def test_inactive_user_cannot_login(monkeypatch):
     assert with_exception is not None
     assert with_exception.status_code == status.HTTP_403_FORBIDDEN
     assert with_exception.detail == "Account is inactive"
+
+
+def test_login_returns_service_unavailable_when_database_fails(monkeypatch):
+    monkeypatch.setattr(user_service, "get_users_collection", lambda: _FailingUsersCollection())
+
+    with_exception = None
+    try:
+        asyncio.run(user_service.login_user("admin@example.com", "StrongPassword123"))
+    except HTTPException as exc:
+        with_exception = exc
+
+    assert with_exception is not None
+    assert with_exception.status_code == status.HTTP_503_SERVICE_UNAVAILABLE
+    assert with_exception.detail == "Authentication service is unavailable. Please check the database connection."
 
 
 def test_super_admin_cannot_delete_self():

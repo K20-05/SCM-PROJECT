@@ -2,7 +2,7 @@ import { createApiClient } from "./dashboard/api.js";
 import { normalizeRole } from "./dashboard/format.js";
 import { getStoredSession, logout, redirectToLogin, rememberDashboard } from "./dashboard/session.js";
 import { createUi } from "./dashboard/ui.js";
-import { createDashboardViews } from "./dashboard/views.js";
+import { createDashboardViews } from "./dashboard/views.js?v=user-list-eight-rows-20260610-1";
 
 window.addEventListener("pagehide", () => {
   document.body.classList.add("auth-suspended");

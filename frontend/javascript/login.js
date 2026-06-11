@@ -125,7 +125,10 @@ form.addEventListener("submit", async (event) => {
 
     const data = await response.json().catch(() => ({}));
     if (!response.ok) {
-      setMessage(data?.detail || "Login failed. Please check your credentials.", "error");
+      const fallbackMessage = response.status >= 500
+        ? "Authentication service is unavailable. Please check the database connection."
+        : "Login failed. Please check your credentials.";
+      setMessage(data?.detail || fallbackMessage, "error");
       resetCaptcha();
       return;
     }

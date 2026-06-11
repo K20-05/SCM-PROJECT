@@ -11,9 +11,10 @@ const SHIPMENT_ROUTES = [
 ];
 const GOODS_TYPES = ["Electronics", "Medicines", "Food products", "Textiles", "Automotive parts", "General cargo"];
 const FALLBACK_DEVICE_OPTIONS = ["GPS tracker", "Thermal tracker", "Humidity sensor", "Shock sensor"];
+const DEVICE_STATUSES = ["available", "assigned", "active", "inactive", "maintenance"];
 const USER_SHIPMENTS_PATH = "/api/shipments?mine=true";
 const DASHBOARD_TABLE_PAGE_SIZE = 5;
-const USER_MANAGEMENT_TABLE_PAGE_SIZE = 5;
+const USER_MANAGEMENT_TABLE_PAGE_SIZE = 8;
 const RECENT_LOGINS_PAGE_SIZE = 3;
 
 export function createDashboardViews({ api, ui }) {
@@ -884,7 +885,16 @@ export function createDashboardViews({ api, ui }) {
       ], "overview")
     );
     ui.grid.appendChild(userManagementPanel(users, dashboard.user, false));
-    ui.grid.appendChild(deviceDataStreamPanel(devices));
+    const deviceHost = document.createElement("div");
+    deviceHost.className = "section-stack";
+    deviceHost.setAttribute("data-view-section", "devices");
+    ui.grid.appendChild(deviceHost);
+    async function refreshAdminDevices() {
+      const latestDevicesResult = await loadList(api, "/api/devices");
+      const latestDevices = listItems(latestDevicesResult);
+      deviceHost.replaceChildren(deviceDataStreamPanel(latestDevices, "devices", refreshAdminDevices));
+    }
+    await refreshAdminDevices();
     const shipmentHost = document.createElement("div");
     shipmentHost.className = "section-stack";
     shipmentHost.setAttribute("data-view-section", "operations");
@@ -1020,22 +1030,189 @@ export function createDashboardViews({ api, ui }) {
     ]);
   }
 
-  function deviceDataStreamPanel(devices, sectionName = "devices") {
+  function deviceDataStreamPanel(devices, sectionName = "devices", onCreated = null) {
+    const toolbar = document.createElement("div");
+    toolbar.className = "user-management-toolbar";
+    const spacer = document.createElement("span");
+    const create = ui.makeButton("Create device", () => {
+      showCreateDeviceDialog(async (createdDevice) => {
+        devices.unshift(createdDevice);
+        if (onCreated) await onCreated();
+      });
+    });
+    toolbar.append(spacer, create);
     return ui.panel("Device data stream", [
+      toolbar,
       ui.paginatedTable(
-        ["Device ID", "Battery level", "First sensor temperature", "Route from", "Route to", "Timestamp"],
+        ["Device ID", "Battery level", "First sensor temperature", "Route from", "Route to", "Status", "Timestamp"],
         devices.map((device) => [
           device.device_id,
           device.battery_level ?? "-",
           device.first_sensor_temperature || "-",
           device.route_from || "-",
           device.route_to || "-",
+          device.status || "-",
           formatDateTime(device.timestamp),
         ]),
         "No device data is currently available.",
         DASHBOARD_TABLE_PAGE_SIZE
       ),
     ], sectionName);
+  }
+
+  function showCreateDeviceDialog(onCreated) {
+    document.querySelector(".create-device-dialog")?.remove();
+
+    const overlay = document.createElement("div");
+    overlay.className = "dialog-overlay create-account-dialog create-device-dialog";
+    overlay.setAttribute("role", "dialog");
+    overlay.setAttribute("aria-modal", "true");
+    overlay.setAttribute("aria-label", "Create device");
+
+    const box = document.createElement("section");
+    box.className = "dialog-box create-account-dialog-box";
+
+    const header = document.createElement("div");
+    header.className = "dialog-header";
+    const title = document.createElement("h3");
+    title.className = "dialog-title";
+    title.textContent = "Create device";
+    const close = document.createElement("button");
+    close.type = "button";
+    close.className = "dialog-close";
+    close.setAttribute("aria-label", "Close create device");
+    close.innerHTML = "&times;";
+    header.append(title, close);
+
+    const form = buildCreateDeviceForm(async (createdDevice) => {
+      if (onCreated) await onCreated(createdDevice);
+    });
+
+    close.addEventListener("click", () => overlay.remove());
+    overlay.addEventListener("click", (event) => {
+      if (event.target === overlay) overlay.remove();
+    });
+    document.addEventListener("keydown", function closeOnEscape(event) {
+      if (!overlay.isConnected) {
+        document.removeEventListener("keydown", closeOnEscape);
+        return;
+      }
+      if (event.key === "Escape") overlay.remove();
+    });
+
+    box.append(header, form);
+    overlay.appendChild(box);
+    document.body.appendChild(overlay);
+    form.elements.device_id?.focus();
+  }
+
+  function buildCreateDeviceForm(onCreated) {
+    const form = document.createElement("form");
+    form.className = "create-user-form";
+    form.setAttribute("autocomplete", "off");
+    const now = new Date();
+    now.setMinutes(now.getMinutes() - now.getTimezoneOffset());
+    const defaultTimestamp = now.toISOString().slice(0, 16);
+    form.innerHTML = `
+      <label>Device ID<input name="device_id" placeholder="Example: DEV-1001" autocomplete="off" required></label>
+      <label>Battery level<input name="battery_level" type="number" min="0" max="100" step="0.1" placeholder="Example: 92" autocomplete="off" required></label>
+      <label>First sensor temperature<input name="first_sensor_temperature" placeholder="Example: 22.4 C" autocomplete="off" required></label>
+      <label>Status<select name="status">${DEVICE_STATUSES.map((status) => `<option value="${status}">${formatLabel(status)}</option>`).join("")}</select></label>
+      <label>Route from<input name="route_from" placeholder="Example: Chennai" autocomplete="off" required></label>
+      <label>Route to<input name="route_to" placeholder="Example: Hyderabad" autocomplete="off" required></label>
+      <label class="full-span">Timestamp<input name="timestamp" type="datetime-local" value="${defaultTimestamp}" autocomplete="off" required></label>
+    `;
+    const message = document.createElement("p");
+    message.className = "form-message";
+    const submit = ui.makeButton("Create device", async () => {
+      if (!form.reportValidity()) return;
+      const payload = Object.fromEntries(new FormData(form).entries());
+      payload.battery_level = Number(payload.battery_level);
+      message.textContent = "";
+      submit.disabled = true;
+      try {
+        const created = await api("/api/devices", {
+          method: "POST",
+          body: JSON.stringify(payload),
+        });
+        form.reset();
+        message.textContent = `Device ${created.device_id} created.`;
+        if (onCreated) await onCreated(created);
+      } catch (error) {
+        message.textContent = error.message;
+      } finally {
+        submit.disabled = false;
+      }
+    });
+    const actions = document.createElement("div");
+    actions.className = "form-actions full-span";
+    actions.append(submit, message);
+    form.append(actions);
+    return form;
+  }
+
+  function recentActivityPanel(logins, shipments, devices, users = []) {
+    const activities = [];
+    const latestLogin = (logins || [])[0];
+    if (latestLogin) {
+      activities.push({
+        icon: "fa-right-to-bracket",
+        title: `${latestLogin.name || "User"} signed in`,
+        detail: `${formatLabel(latestLogin.role || "user")} access at ${formatDateTime(latestLogin.logged_in_at)}`,
+      });
+    }
+
+    const createdUser = users.find((user) => user.role !== "super_admin") || users[0];
+    if (createdUser) {
+      activities.push({
+        icon: "fa-user-plus",
+        title: "User account created",
+        detail: `${createdUser.name || createdUser.email} is registered as ${formatLabel(createdUser.role)}`,
+      });
+    }
+
+    const assignedDevice = devices.find((device) => device.status === "assigned") || devices[0];
+    if (assignedDevice) {
+      activities.push({
+        icon: "fa-microchip",
+        title: `Device ${assignedDevice.device_id} ${assignedDevice.status === "assigned" ? "assigned" : `is ${formatLabel(assignedDevice.status)}`}`,
+        detail: `${assignedDevice.battery_level ?? "-"}% battery, ${assignedDevice.route_from || "-"} to ${assignedDevice.route_to || "-"}`,
+      });
+    }
+
+    const shipment = shipments[0];
+    if (shipment) {
+      activities.push({
+        icon: "fa-box",
+        title: `Shipment ${shipment.tracking_id || shipment.shipment_number || "request"} is ${formatLabel(shipment.status)}`,
+        detail: `${shipment.container_number || "Container"} on ${shipment.route_details || "assigned route"}`,
+      });
+    }
+
+    const list = document.createElement("div");
+    list.className = "activity-feed";
+    activities
+      .slice(0, 4)
+      .forEach((activity) => {
+        const item = document.createElement("article");
+        item.className = "activity-item";
+        item.innerHTML = `
+          <i class="fa-solid ${activity.icon}" aria-hidden="true"></i>
+          <span>
+            <strong>${escapeHtml(activity.title)}</strong>
+            <small>${escapeHtml(activity.detail)}</small>
+          </span>
+        `;
+        list.appendChild(item);
+      });
+
+    if (!list.children.length) {
+      const empty = document.createElement("p");
+      empty.className = "empty-state";
+      empty.textContent = "No recent activity found.";
+      list.appendChild(empty);
+    }
+    return ui.panel("Recent activity", [list], "overview");
   }
 
   function userMatchesSearch(user, query) {
@@ -1046,15 +1223,6 @@ export function createDashboardViews({ api, ui }) {
   }
 
   function userManagementPanel(users, currentUser, canDelete) {
-    const contentHost = document.createElement("div");
-    const tabs = document.createElement("div");
-    tabs.className = "management-tabs";
-    tabs.setAttribute("role", "tablist");
-
-    const usersTab = makeManagementTab("Users", true);
-    const createTab = makeManagementTab("Create account", false);
-    tabs.append(usersTab, createTab);
-
     const searchWrap = document.createElement("label");
     searchWrap.className = "table-search-wrap";
     const searchIcon = document.createElement("i");
@@ -1069,6 +1237,12 @@ export function createDashboardViews({ api, ui }) {
 
     const tableHost = document.createElement("div");
     tableHost.className = "search-results user-management-results";
+    const toolbar = document.createElement("div");
+    toolbar.className = "user-management-toolbar";
+    const openCreateAccount = ui.makeButton("Create account", () => {
+      showCreateAccountDialog(users, canDelete, renderTable);
+    });
+    toolbar.append(searchWrap, openCreateAccount);
 
     function renderTable() {
       const query = search.value.trim().toLowerCase();
@@ -1082,59 +1256,74 @@ export function createDashboardViews({ api, ui }) {
         )
       );
     }
-
-    function setActiveTab(activeTab) {
-      [usersTab, createTab].forEach((tab) => {
-        const isActive = tab === activeTab;
-        tab.classList.toggle("active", isActive);
-        tab.setAttribute("aria-selected", String(isActive));
-      });
-    }
-
-    function showUserList() {
-      setActiveTab(usersTab);
-      contentHost.replaceChildren(searchWrap, tableHost);
-    }
-
-    function showCreateAccount() {
-      setActiveTab(createTab);
-      const form = buildCreateUserForm(canDelete, (createdUser) => {
-        users.unshift(createdUser);
-        renderTable();
-        showUserList();
-      });
-      const formPanel = createFormWrapper(form);
-      contentHost.replaceChildren(formPanel);
-    }
-
-    usersTab.addEventListener("click", showUserList);
-    createTab.addEventListener("click", showCreateAccount);
     search.addEventListener("input", renderTable);
     renderTable();
-    showUserList();
-    return ui.panel("User management", [tabs, contentHost], "users");
+    return ui.panel("User management", [toolbar, tableHost], "users");
   }
 
-  function makeManagementTab(label, active) {
-    const tab = document.createElement("button");
-    tab.type = "button";
-    tab.className = `management-tab${active ? " active" : ""}`;
-    tab.setAttribute("role", "tab");
-    tab.setAttribute("aria-selected", String(active));
-    tab.textContent = label;
-    return tab;
+  function showCreateAccountDialog(users, canCreateSuperAdmin, onUsersChanged) {
+    document.querySelector(".create-account-dialog")?.remove();
+
+    const overlay = document.createElement("div");
+    overlay.className = "dialog-overlay create-account-dialog";
+    overlay.setAttribute("role", "dialog");
+    overlay.setAttribute("aria-modal", "true");
+    overlay.setAttribute("aria-label", "Create account");
+
+    const box = document.createElement("section");
+    box.className = "dialog-box create-account-dialog-box";
+
+    const header = document.createElement("div");
+    header.className = "dialog-header";
+    const titleWrap = document.createElement("div");
+    const title = document.createElement("h3");
+    title.className = "dialog-title";
+    title.textContent = "Create account";
+    const helper = document.createElement("p");
+    helper.className = "dialog-helper";
+    helper.textContent = "Add a user, admin, or super admin account with a temporary password.";
+    titleWrap.append(title, helper);
+    const close = document.createElement("button");
+    close.type = "button";
+    close.className = "dialog-close";
+    close.setAttribute("aria-label", "Close create account");
+    close.innerHTML = "&times;";
+    header.append(titleWrap, close);
+
+    const form = buildCreateUserForm(canCreateSuperAdmin, (createdUser) => {
+      users.unshift(createdUser);
+      onUsersChanged();
+    });
+
+    close.addEventListener("click", () => overlay.remove());
+    overlay.addEventListener("click", (event) => {
+      if (event.target === overlay) overlay.remove();
+    });
+    document.addEventListener("keydown", function closeOnEscape(event) {
+      if (!overlay.isConnected) {
+        document.removeEventListener("keydown", closeOnEscape);
+        return;
+      }
+      if (event.key === "Escape") overlay.remove();
+    });
+
+    box.append(header, form);
+    overlay.appendChild(box);
+    document.body.appendChild(overlay);
+    form.elements.name?.focus();
   }
 
   function buildCreateUserForm(canCreateSuperAdmin, onCreated) {
     const form = document.createElement("form");
     form.className = "create-user-form";
+    form.setAttribute("autocomplete", "off");
     const roleOptions = canCreateSuperAdmin ? ["user", "admin", "super_admin"] : ["user", "admin"];
     form.innerHTML = `
-      <label>Name<input name="name" required></label>
-      <label>Email<input name="email" type="email" required></label>
-      <label>Phone<input name="phone" inputmode="numeric" maxlength="10" pattern="[0-9]{10}" required></label>
-      <label>Role<select name="role">${roleOptions.map((role) => `<option value="${role}">${role.replace(/_/g, " ")}</option>`).join("")}</select></label>
-      <label class="full-span">Password<span class="password-generate-row"><input name="password" type="text" minlength="8" required><button type="button" class="action-button generate-password">Generate</button></span></label>
+      <label>Full name<input name="name" placeholder="Example: Megha Sharma" autocomplete="off" required></label>
+      <label>Email address<input name="email" type="email" placeholder="user@example.com" autocomplete="off" required></label>
+      <label>Phone number<input name="phone" inputmode="numeric" maxlength="10" pattern="[0-9]{10}" placeholder="10-digit number" autocomplete="off" required></label>
+      <label>Account role<select name="role">${roleOptions.map((role) => `<option value="${role}">${role.replace(/_/g, " ")}</option>`).join("")}</select></label>
+      <label class="full-span">Temporary password<span class="password-generate-row"><input name="password" type="text" minlength="8" placeholder="Enter a password or generate one" autocomplete="off" required><button type="button" class="action-button generate-password">Generate</button></span></label>
     `;
     const message = document.createElement("p");
     message.className = "form-message";
@@ -1154,6 +1343,7 @@ export function createDashboardViews({ api, ui }) {
       const createdPassword = generatedPassword && generatedPassword === payload.password ? generatedPassword : "";
       delete payload.role;
       message.textContent = "";
+      message.className = "form-message";
       submit.disabled = true;
       try {
         const created = await api("/api/users", {
@@ -1175,10 +1365,12 @@ export function createDashboardViews({ api, ui }) {
         });
         form.reset();
         generatedPassword = "";
+        message.className = "form-message success";
         message.textContent = createdPassword
           ? `Account created for ${created.email}. Temporary password: ${createdPassword}`
           : `Account created for ${created.email}.`;
       } catch (error) {
+        message.className = "form-message error";
         message.textContent = error.message;
       } finally {
         submit.disabled = false;
@@ -1215,48 +1407,13 @@ export function createDashboardViews({ api, ui }) {
       .join("");
   }
 
-  function createFormWrapper(form) {
-    const wrapper = document.createElement("div");
-    wrapper.className = "create-user-panel";
-    const heading = document.createElement("h4");
-    heading.textContent = "Create account";
-    wrapper.append(heading, form);
-    return wrapper;
-  }
-
   async function renderSuperAdmin(dashboard) {
     ui.setWelcome("super_admin", dashboard.user);
     const metrics = dashboard.metrics || {};
-    ui.setQuickStats([
-      { label: "Active users", value: metrics.active_users ?? 0 },
-      { label: "Pending shipments", value: metrics.pending_shipments ?? 0 },
-      { label: "Available devices", value: metrics.available_devices ?? 0 },
-      { label: "Today's deliveries", value: metrics.todays_deliveries ?? 0 },
-    ]);
     ui.grid.appendChild(ui.card("metric", "Total users", metrics.total_users ?? 0));
-    ui.grid.appendChild(ui.card("metric", "Admin count", metrics.admin_count ?? 0));
     ui.grid.appendChild(ui.card("metric", "Active users", metrics.active_users ?? 0));
-    ui.grid.appendChild(ui.card("metric", "Platform health", metrics.platform_health || "online"));
     ui.grid.appendChild(ui.card("metric", "Devices monitored", metrics.devices_monitored ?? 0));
-    ui.grid.appendChild(ui.card("metric", "Shipments tracked", metrics.shipments_tracked ?? 0));
     ui.grid.appendChild(ui.card("metric", "Pending shipments", metrics.pending_shipments ?? 0));
-    ui.grid.appendChild(ui.card("metric", "Assigned devices", metrics.assigned_devices ?? 0));
-
-    ui.grid.appendChild(
-      ui.panel("Recent logins", [
-        ui.paginatedTable(
-          ["Name", "Email", "Role", "Login time"],
-          (dashboard.recent_logins || []).map((login) => [
-            login.name,
-            login.email,
-            login.role,
-            formatDateTime(login.logged_in_at),
-          ]),
-          "No login records found.",
-          RECENT_LOGINS_PAGE_SIZE
-        ),
-      ])
-    );
 
     const usersResult = await loadList(api, "/api/admin/users");
     const devicesResult = await loadList(api, "/api/devices");
@@ -1266,10 +1423,11 @@ export function createDashboardViews({ api, ui }) {
     const shipments = listItems(shipmentsResult);
     const userManagementError = ui.errorPanel("User management status", usersResult, "users");
     const devicesError = ui.errorPanel("Device data stream status", devicesResult, "devices");
-    const shipmentsError = ui.errorPanel("Shipment chart status", shipmentsResult, "overview");
+    const shipmentsError = ui.errorPanel("Shipment chart status", shipmentsResult, "health");
     if (userManagementError) ui.grid.appendChild(userManagementError);
     if (devicesError) ui.grid.appendChild(devicesError);
     if (shipmentsError) ui.grid.appendChild(shipmentsError);
+    ui.grid.appendChild(recentActivityPanel(dashboard.recent_logins || [], shipments, devices, users));
     ui.grid.appendChild(
       chartPanel("Governance charts", [
         pieChart(
@@ -1291,10 +1449,34 @@ export function createDashboardViews({ api, ui }) {
           "Device status",
           chartDatasetFromCounts(countBy(devices, "status"), ["available", "assigned", "active", "inactive", "maintenance"])
         ),
+      ], "health")
+    );
+    ui.grid.appendChild(
+      ui.panel("Recent logins", [
+        ui.paginatedTable(
+          ["Name", "Email", "Role", "Login time"],
+          (dashboard.recent_logins || []).map((login) => [
+            login.name,
+            login.email,
+            login.role,
+            formatDateTime(login.logged_in_at),
+          ]),
+          "No login records found.",
+          RECENT_LOGINS_PAGE_SIZE
+        ),
       ], "overview")
     );
     ui.grid.appendChild(userManagementPanel(users, dashboard.user, true));
-    ui.grid.appendChild(deviceDataStreamPanel(devices));
+    const deviceHost = document.createElement("div");
+    deviceHost.className = "section-stack";
+    deviceHost.setAttribute("data-view-section", "devices");
+    ui.grid.appendChild(deviceHost);
+    async function refreshSuperAdminDevices() {
+      const latestDevicesResult = await loadList(api, "/api/devices");
+      const latestDevices = listItems(latestDevicesResult);
+      deviceHost.replaceChildren(deviceDataStreamPanel(latestDevices, "devices", refreshSuperAdminDevices));
+    }
+    await refreshSuperAdminDevices();
     const shipmentHost = document.createElement("div");
     shipmentHost.className = "section-stack";
     shipmentHost.setAttribute("data-view-section", "operations");

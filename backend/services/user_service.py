@@ -1,7 +1,7 @@
 from datetime import timedelta
 
 from fastapi import HTTPException, status
-from pymongo.errors import DuplicateKeyError
+from pymongo.errors import DuplicateKeyError, PyMongoError
 
 from auth.auth_config import settings as auth_settings
 from auth.auth_utils import create_access_token, hash_password, verify_password
@@ -104,7 +104,15 @@ async def login_user(email: str, password: str) -> Token:
         status_code=status.HTTP_401_UNAUTHORIZED,
         detail="Invalid email or password",
     )
-    user = await get_users_collection().find_one({"email": email})
+    service_unavailable_error = HTTPException(
+        status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+        detail="Authentication service is unavailable. Please check the database connection.",
+    )
+    try:
+        user = await get_users_collection().find_one({"email": email})
+    except (PyMongoError, RuntimeError) as exc:
+        raise service_unavailable_error from exc
+
     if not user:
         raise invalid_credentials_error
     if not bool(user.get("is_active", True)) or bool(user.get("is_deleted", False)):
@@ -114,16 +122,20 @@ async def login_user(email: str, password: str) -> Token:
     if not hashed_password or not verify_password(password, hashed_password):
         raise invalid_credentials_error
 
-    await get_logins_collection().insert_one(
-        {
-            "user_id": str(user["_id"]),
-            "name": user.get("name", ""),
-            "email": user["email"],
-            "role": user.get("role", UserRole.USER.value),
-            "logged_in_at": now_utc(),
-            "login_source": "frontend",
-        }
-    )
+    try:
+        await get_logins_collection().insert_one(
+            {
+                "user_id": str(user["_id"]),
+                "name": user.get("name", ""),
+                "email": user["email"],
+                "role": user.get("role", UserRole.USER.value),
+                "logged_in_at": now_utc(),
+                "login_source": "frontend",
+            }
+        )
+    except (PyMongoError, RuntimeError) as exc:
+        raise service_unavailable_error from exc
+
     return token_for_user(user)
 
 
