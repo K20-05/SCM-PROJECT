@@ -21,7 +21,7 @@ def parse_device_event(raw_value: bytes | str | dict[str, Any]) -> dict[str, Any
         text = raw_value.decode("utf-8") if isinstance(raw_value, bytes) else raw_value
         payload = json.loads(text)
 
-    device_id = str(payload.get("device_id") or "").strip()
+    device_id = str(payload.get("device_id") or payload.get("Device_ID") or "").strip()
     if not device_id:
         raise ValueError("Kafka device event is missing device_id")
 
@@ -33,10 +33,12 @@ def parse_device_event(raw_value: bytes | str | dict[str, Any]) -> dict[str, Any
 
     return {
         "device_id": device_id,
-        "battery_level": float(payload.get("battery_level", 0)),
-        "first_sensor_temperature": str(payload.get("first_sensor_temperature", "")),
-        "route_from": str(payload.get("route_from", "")),
-        "route_to": str(payload.get("route_to", "")),
+        "battery_level": float(payload.get("battery_level", payload.get("Battery_Level", 0))),
+        "first_sensor_temperature": str(
+            payload.get("first_sensor_temperature", payload.get("First_Sensor_temperature", ""))
+        ),
+        "route_from": str(payload.get("route_from", payload.get("Route_From", ""))),
+        "route_to": str(payload.get("route_to", payload.get("Route_To", ""))),
         "timestamp": timestamp,
         "status": str(payload.get("status") or "active"),
     }

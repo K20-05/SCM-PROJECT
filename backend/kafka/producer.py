@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import json
+import random
+import time
 from datetime import datetime, timezone
 from typing import Any
 
@@ -82,6 +84,41 @@ def publish_sample_event() -> dict[str, Any]:
     return event
 
 
+def publish_random_events(interval_seconds: int = 10) -> None:
+    routes = ["Newyork,USA", "Chennai, India", "Bengaluru, India", "London,UK"]
+    producer = DeviceDataProducer()
+    try:
+        while True:
+            route_from = random.choice(routes)
+            route_to = random.choice(routes)
+            if route_from == route_to:
+                continue
+
+            event = build_device_event(
+                device_id=str(random.randint(1150, 1158)),
+                battery_level=round(random.uniform(2.0, 5.0), 2),
+                first_sensor_temperature=round(random.uniform(10, 40.0), 1),
+                route_from=route_from,
+                route_to=route_to,
+            )
+            producer.send_device_event(event)
+            producer.flush()
+            print(f"Sending: {event}")
+            time.sleep(interval_seconds)
+    finally:
+        producer.close()
+
+
 if __name__ == "__main__":
-    sent = publish_sample_event()
-    print(f"Published device event for {sent['device_id']} to {settings.kafka_device_topic}")
+    import argparse
+
+    parser = argparse.ArgumentParser(description="Publish SCMXpertLite device data to Kafka.")
+    parser.add_argument("--loop", action="store_true", help="continuously publish random device events")
+    parser.add_argument("--interval", type=int, default=10, help="seconds between looped events")
+    args = parser.parse_args()
+
+    if args.loop:
+        publish_random_events(interval_seconds=args.interval)
+    else:
+        sent = publish_sample_event()
+        print(f"Published device event for {sent['device_id']} to {settings.kafka_device_topic}")

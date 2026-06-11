@@ -33,6 +33,25 @@ def test_build_and_parse_device_event_normalizes_payload():
     assert parsed["status"] == "active"
 
 
+def test_parse_device_event_accepts_legacy_uppercase_payload():
+    parsed = parse_device_event(
+        {
+            "Battery_Level": 3.8,
+            "Device_ID": "1152",
+            "First_Sensor_temperature": 27.4,
+            "Route_From": "Chennai, India",
+            "Route_To": "London,UK",
+            "timestamp": "2026-06-11T12:00:00+00:00",
+        }
+    )
+
+    assert parsed["device_id"] == "1152"
+    assert parsed["battery_level"] == 3.8
+    assert parsed["first_sensor_temperature"] == "27.4"
+    assert parsed["route_from"] == "Chennai, India"
+    assert parsed["route_to"] == "London,UK"
+
+
 def test_persist_device_event_writes_sensor_and_upserts_device(monkeypatch):
     sensors = _FakeCollection()
     devices = _FakeCollection()
