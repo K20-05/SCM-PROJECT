@@ -5,6 +5,8 @@ import json
 from datetime import datetime, timezone
 from typing import Any
 
+from kafka.errors import NoBrokersAvailable
+
 from backend.config.app_config import settings
 from backend.database.mongo import (
     close_mongo_connection,
@@ -74,14 +76,20 @@ def _json_deserializer(value: bytes) -> dict[str, Any]:
 async def consume_device_events() -> None:
     from kafka import KafkaConsumer
 
-    consumer = KafkaConsumer(
-        settings.kafka_device_topic,
-        bootstrap_servers=settings.kafka_bootstrap_servers.split(","),
-        group_id=settings.kafka_consumer_group,
-        value_deserializer=_json_deserializer,
-        enable_auto_commit=True,
-        auto_offset_reset="latest",
-    )
+    try:
+        consumer = KafkaConsumer(
+            settings.kafka_device_topic,
+            bootstrap_servers=settings.kafka_bootstrap_servers.split(","),
+            group_id=settings.kafka_consumer_group,
+            value_deserializer=_json_deserializer,
+            enable_auto_commit=True,
+            auto_offset_reset="latest",
+        )
+    except NoBrokersAvailable as exc:
+        raise RuntimeError(
+            "Kafka broker is not reachable. Start Kafka and check KAFKA_BOOTSTRAP_SERVERS "
+            f"in .env. Current value: {settings.kafka_bootstrap_servers}"
+        ) from exc
     await connect_to_mongo()
     try:
         for message in consumer:

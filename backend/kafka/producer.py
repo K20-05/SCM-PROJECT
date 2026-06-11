@@ -6,6 +6,8 @@ import time
 from datetime import datetime, timezone
 from typing import Any
 
+from kafka.errors import NoBrokersAvailable
+
 from backend.config.app_config import settings
 
 
@@ -44,11 +46,17 @@ class DeviceDataProducer:
         if self._producer is None:
             from kafka import KafkaProducer
 
-            self._producer = KafkaProducer(
-                bootstrap_servers=self.bootstrap_servers.split(","),
-                value_serializer=_json_serializer,
-                key_serializer=lambda value: value.encode("utf-8"),
-            )
+            try:
+                self._producer = KafkaProducer(
+                    bootstrap_servers=self.bootstrap_servers.split(","),
+                    value_serializer=_json_serializer,
+                    key_serializer=lambda value: value.encode("utf-8"),
+                )
+            except NoBrokersAvailable as exc:
+                raise RuntimeError(
+                    "Kafka broker is not reachable. Start Kafka and check KAFKA_BOOTSTRAP_SERVERS "
+                    f"in .env. Current value: {self.bootstrap_servers}"
+                ) from exc
         return self._producer
 
     def send_device_event(self, event: dict[str, Any]):
