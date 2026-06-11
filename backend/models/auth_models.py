@@ -102,6 +102,30 @@ class ChangePasswordRequest(BaseModel):
         return value
 
 
+class ForgotPasswordRequest(BaseModel):
+    email: EmailStr
+
+
+class ResetPasswordRequest(BaseModel):
+    email: EmailStr
+    reset_token: str
+    new_password: str
+    confirm_new_password: str
+
+    @field_validator("confirm_new_password")
+    @classmethod
+    def reset_passwords_match(cls, value: str, info: ValidationInfo) -> str:
+        if "new_password" in info.data and value != info.data["new_password"]:
+            raise ValueError("New passwords do not match")
+        return value
+
+    @field_validator("new_password")
+    @classmethod
+    def reset_password_must_be_strong(cls, value: str) -> str:
+        validate_password_strength(value, field_name="New password")
+        return value
+
+
 class UserOut(BaseModel):
     name: str
     email: EmailStr

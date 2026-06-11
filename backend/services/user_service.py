@@ -1,13 +1,18 @@
-from datetime import timedelta
+from datetime import timezone, timedelta
+import hashlib
+import secrets
 
 from fastapi import HTTPException, status
 from pymongo.errors import DuplicateKeyError, PyMongoError
 
 from auth.auth_config import settings as auth_settings
 from auth.auth_utils import create_access_token, hash_password, verify_password
+from backend.config.app_config import settings as app_settings
 from backend.database.mongo import get_logins_collection, get_users_collection
 from backend.models.auth_models import (
     ChangePasswordRequest,
+    ForgotPasswordRequest,
+    ResetPasswordRequest,
     Token,
     UserCreate,
     UserOut,
@@ -24,6 +29,20 @@ DASHBOARD_URLS = {
     UserRole.ADMIN.value: "/dashboard/admin",
     UserRole.SUPER_ADMIN.value: "/dashboard/super-admin",
 }
+RESET_TOKEN_TTL_MINUTES = 30
+PASSWORD_RESET_MESSAGE = "If an active account exists for that email, a password reset token has been created."
+
+
+def _hash_reset_token(token: str) -> str:
+    return hashlib.sha256(token.encode("utf-8")).hexdigest()
+
+
+def _reset_token_expired(expires_at) -> bool:
+    if not expires_at:
+        return True
+    if expires_at.tzinfo is None:
+        expires_at = expires_at.replace(tzinfo=timezone.utc)
+    return expires_at < now_utc()
 
 
 def token_for_user(user: dict) -> Token:
@@ -149,6 +168,67 @@ async def change_user_password(payload: ChangePasswordRequest, current_user: dic
         {"$set": {"hashed_password": hash_password(payload.new_password), "updated_at": now_utc()}},
     )
     return message_response("Password changed successfully")
+
+
+async def request_password_reset(payload: ForgotPasswordRequest) -> dict:
+    reset_token = secrets.token_urlsafe(32)
+    reset_token_hash = _hash_reset_token(reset_token)
+    expires_at = now_utc() + timedelta(minutes=RESET_TOKEN_TTL_MINUTES)
+
+    users_collection = get_users_collection()
+    user = await users_collection.find_one({"email": payload.email})
+    response = message_response(PASSWORD_RESET_MESSAGE)
+    if not user or not bool(user.get("is_active", True)) or bool(user.get("is_deleted", False)):
+        return response
+
+    await users_collection.update_one(
+        {"_id": user["_id"]},
+        {
+            "$set": {
+                "password_reset_token_hash": reset_token_hash,
+                "password_reset_expires_at": expires_at,
+                "password_reset_requested_at": now_utc(),
+                "updated_at": now_utc(),
+            }
+        },
+    )
+
+    if app_settings.environment.lower() != "production":
+        response["reset_token"] = reset_token
+        response["expires_in_minutes"] = RESET_TOKEN_TTL_MINUTES
+    return response
+
+
+async def reset_user_password(payload: ResetPasswordRequest) -> dict:
+    users_collection = get_users_collection()
+    user = await users_collection.find_one({"email": payload.email})
+    invalid_error = HTTPException(
+        status_code=status.HTTP_400_BAD_REQUEST,
+        detail="Password reset token is invalid or expired.",
+    )
+    if not user or not bool(user.get("is_active", True)) or bool(user.get("is_deleted", False)):
+        raise invalid_error
+
+    expires_at = user.get("password_reset_expires_at")
+    token_hash = user.get("password_reset_token_hash")
+    if _reset_token_expired(expires_at) or token_hash != _hash_reset_token(payload.reset_token):
+        raise invalid_error
+
+    await users_collection.update_one(
+        {"_id": user["_id"]},
+        {
+            "$set": {
+                "hashed_password": hash_password(payload.new_password),
+                "updated_at": now_utc(),
+            },
+            "$unset": {
+                "password_reset_token_hash": "",
+                "password_reset_expires_at": "",
+                "password_reset_requested_at": "",
+            },
+        },
+    )
+    return message_response("Password reset successfully. You can now log in.")
 
 
 async def create_manual_user(payload: UserCreate) -> dict:

@@ -12,6 +12,16 @@ const captchaQuestion = document.getElementById("captcha-question");
 const captchaAnswer = document.getElementById("captcha-answer");
 const captchaRefresh = document.getElementById("captcha-refresh");
 const captchaError = document.getElementById("captcha-error");
+const forgotToggle = document.getElementById("forgot-toggle");
+const forgotPanel = document.getElementById("forgot-panel");
+const forgotForm = document.getElementById("forgotForm");
+const forgotEmail = document.getElementById("forgot-email");
+const forgotSubmit = document.getElementById("forgot-submit");
+const resetForm = document.getElementById("resetForm");
+const resetEmail = document.getElementById("reset-email");
+const resetToken = document.getElementById("reset-token");
+const resetPassword = document.getElementById("reset-password");
+const resetConfirmPassword = document.getElementById("reset-confirm-password");
 
 const fields = {
   email: document.getElementById("email"),
@@ -36,6 +46,18 @@ let recaptchaWidgetId = null;
 function setMessage(text, type) {
   messageBox.textContent = text;
   messageBox.className = `message ${type || ""}`.trim();
+}
+
+function isValidEmail(value) {
+  return /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(value);
+}
+
+function passwordStrengthError(value) {
+  if (value.length < 8) return "New password must be at least 8 characters.";
+  if (!/[A-Z]/.test(value)) return "New password must include an uppercase letter.";
+  if (!/[a-z]/.test(value)) return "New password must include a lowercase letter.";
+  if (!/\d/.test(value)) return "New password must include a number.";
+  return "";
 }
 
 function setCapsWarning(visible) {
@@ -74,8 +96,7 @@ function validate(values) {
   if (!values.email) fieldErrors.email = "Email is required.";
   if (!values.password) fieldErrors.password = "Password is required.";
 
-  const emailPattern = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
-  if (values.email && !emailPattern.test(values.email)) {
+  if (values.email && !isValidEmail(values.email)) {
     fieldErrors.email = "Please enter a valid email.";
   }
   if (captchaProvider === "google") {
@@ -166,6 +187,105 @@ form.addEventListener("input", () => {
 });
 
 captchaRefresh?.addEventListener("click", loadLocalCaptcha);
+
+forgotToggle?.addEventListener("click", () => {
+  forgotPanel.hidden = !forgotPanel.hidden;
+  forgotToggle.textContent = forgotPanel.hidden ? "Forgot password?" : "Back to login";
+  if (!forgotPanel.hidden) {
+    forgotEmail.value = fields.email.value.trim();
+    resetEmail.value = fields.email.value.trim();
+    forgotEmail.focus();
+  }
+});
+
+forgotForm?.addEventListener("submit", async (event) => {
+  event.preventDefault();
+  setMessage("");
+  const email = forgotEmail.value.trim();
+  if (!email || !isValidEmail(email)) {
+    setMessage("Enter a valid email to request a reset token.", "error");
+    return;
+  }
+
+  forgotSubmit.disabled = true;
+  try {
+    const response = await fetch("/api/auth/forgot-password", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email }),
+    });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      setMessage(data?.detail || "Could not create a reset token.", "error");
+      return;
+    }
+
+    resetEmail.value = email;
+    if (data.reset_token) {
+      resetToken.value = data.reset_token;
+      setMessage(`Reset token created. It expires in ${data.expires_in_minutes || 30} minutes.`, "success");
+    } else {
+      setMessage(data.message || "If the account exists, reset instructions have been created.", "success");
+    }
+  } catch (error) {
+    setMessage("Cannot reach server. Check backend is running on port 8000.", "error");
+  } finally {
+    forgotSubmit.disabled = false;
+  }
+});
+
+resetForm?.addEventListener("submit", async (event) => {
+  event.preventDefault();
+  setMessage("");
+
+  const payload = {
+    email: resetEmail.value.trim(),
+    reset_token: resetToken.value.trim(),
+    new_password: resetPassword.value,
+    confirm_new_password: resetConfirmPassword.value,
+  };
+
+  const strengthError = passwordStrengthError(payload.new_password);
+  if (!payload.email || !isValidEmail(payload.email)) {
+    setMessage("Enter the email for the account you want to reset.", "error");
+    return;
+  }
+  if (!payload.reset_token) {
+    setMessage("Paste the reset token.", "error");
+    return;
+  }
+  if (strengthError) {
+    setMessage(strengthError, "error");
+    return;
+  }
+  if (payload.new_password !== payload.confirm_new_password) {
+    setMessage("New passwords do not match.", "error");
+    return;
+  }
+
+  resetForm.querySelector("button[type='submit']").disabled = true;
+  try {
+    const response = await fetch("/api/auth/reset-password", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      setMessage(data?.detail || "Could not reset password.", "error");
+      return;
+    }
+
+    fields.email.value = payload.email;
+    fields.password.value = "";
+    resetForm.reset();
+    setMessage(data.message || "Password reset successfully. You can now log in.", "success");
+  } catch (error) {
+    setMessage("Cannot reach server. Check backend is running on port 8000.", "error");
+  } finally {
+    resetForm.querySelector("button[type='submit']").disabled = false;
+  }
+});
 
 Object.entries(fields).forEach(([key, input]) => {
   input.addEventListener("blur", () => {

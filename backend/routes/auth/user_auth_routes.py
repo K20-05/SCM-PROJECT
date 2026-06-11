@@ -4,7 +4,17 @@ from auth.access_control import require_role
 from auth.auth_deps import get_current_user
 from auth.captcha import captcha_config, create_local_captcha, verify_login_captcha
 from auth.rate_limit import auth_rate_limit
-from backend.models.auth_models import ChangePasswordRequest, Token, UserCreate, UserLogin, UserOut, UserSignup, UserUpdate
+from backend.models.auth_models import (
+    ChangePasswordRequest,
+    ForgotPasswordRequest,
+    ResetPasswordRequest,
+    Token,
+    UserCreate,
+    UserLogin,
+    UserOut,
+    UserSignup,
+    UserUpdate,
+)
 from backend.services.admin_user_service import delete_admin_user
 from backend.services.user_service import (
     change_user_password,
@@ -12,6 +22,8 @@ from backend.services.user_service import (
     get_visible_user,
     list_users_for_admin,
     login_user,
+    request_password_reset,
+    reset_user_password,
     signup_user,
     token_for_user,
     update_visible_user,
@@ -71,6 +83,16 @@ async def get_me(current_user: dict = Depends(get_current_user)):
 @router.post("/change-password", dependencies=[Depends(auth_rate_limit)])
 async def change_password(payload: ChangePasswordRequest, current_user: dict = Depends(get_current_user)):
     return await change_user_password(payload, current_user)
+
+
+@router.post("/forgot-password", dependencies=[Depends(auth_rate_limit)])
+async def forgot_password(payload: ForgotPasswordRequest):
+    return await request_password_reset(payload)
+
+
+@router.post("/reset-password", dependencies=[Depends(auth_rate_limit)])
+async def reset_password(payload: ResetPasswordRequest):
+    return await reset_user_password(payload)
 
 
 @router.post("/refresh", response_model=Token)
