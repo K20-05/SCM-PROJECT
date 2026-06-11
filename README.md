@@ -55,10 +55,10 @@ SCMXPertLite is a lightweight shipment tracking platform with role-based user ac
 - Publish a sample device event: `python -m backend.kafka.producer`
 - The consumer writes each event to `sensor_data` and upserts the latest device state into `devices`.
 
-## Password Reset
+## Password Reset OTP
 - Login includes a forgot-password flow.
-- Configure SMTP with `SMTP_HOST`, `SMTP_PORT`, `SMTP_USERNAME`, `SMTP_PASSWORD`, `SMTP_FROM_EMAIL`, and `SMTP_USE_TLS` to email reset tokens.
-- Without SMTP settings, the reset endpoint returns the token so the flow can be tested locally and the login page fills it into the reset form.
+- Configure SMTP with `SMTP_HOST`, `SMTP_PORT`, `SMTP_USERNAME`, `SMTP_PASSWORD`, `SMTP_FROM_EMAIL`, and `SMTP_USE_TLS` to email reset OTPs.
+- Without SMTP settings, the reset endpoint returns the OTP so the flow can be tested locally and the login page fills it into the reset form.
 - For Gmail, create an app password and use it as `SMTP_PASSWORD`; normal account passwords usually will not work.
 
 ## Production Notes

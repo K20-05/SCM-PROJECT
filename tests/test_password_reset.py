@@ -50,8 +50,10 @@ def test_password_reset_request_returns_development_token(monkeypatch):
 
     result = asyncio.run(user_service.request_password_reset(ForgotPasswordRequest(email=user["email"])))
 
-    assert result["message"] == "Email is not configured, so the reset token is shown here for testing."
+    assert result["message"] == "Email is not configured, so the OTP is shown here for testing."
     assert result["reset_token"]
+    assert result["reset_token"].isdigit()
+    assert len(result["reset_token"]) == 6
     assert user["password_reset_token_hash"] == user_service._hash_reset_token(result["reset_token"])
     assert user["password_reset_expires_at"] > now_utc()
 

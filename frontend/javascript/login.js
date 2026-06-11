@@ -203,7 +203,7 @@ forgotForm?.addEventListener("submit", async (event) => {
   setMessage("");
   const email = forgotEmail.value.trim();
   if (!email || !isValidEmail(email)) {
-    setMessage("Enter a valid email to request a reset token.", "error");
+    setMessage("Enter a valid email to request an OTP.", "error");
     return;
   }
 
@@ -216,7 +216,7 @@ forgotForm?.addEventListener("submit", async (event) => {
     });
     const data = await response.json().catch(() => ({}));
     if (!response.ok) {
-      setMessage(data?.detail || "Could not create a reset token.", "error");
+      setMessage(data?.detail || "Could not create an OTP.", "error");
       return;
     }
 
@@ -226,7 +226,7 @@ forgotForm?.addEventListener("submit", async (event) => {
       const prefix = data.message || "Reset token created.";
       setMessage(`${prefix} It expires in ${data.expires_in_minutes || 30} minutes.`, "success");
     } else if (data.email_sent) {
-      setMessage(data.message || "Password reset token sent to your email.", "success");
+      setMessage(data.message || "Password reset OTP sent to your email.", "success");
     } else {
       setMessage(data.message || "If the account exists, reset instructions have been created.", "success");
     }
@@ -254,7 +254,7 @@ resetForm?.addEventListener("submit", async (event) => {
     return;
   }
   if (!payload.reset_token) {
-    setMessage("Paste the reset token.", "error");
+    setMessage("Enter the 6-digit OTP.", "error");
     return;
   }
   if (strengthError) {

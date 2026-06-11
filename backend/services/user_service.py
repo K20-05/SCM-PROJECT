@@ -31,8 +31,8 @@ DASHBOARD_URLS = {
     UserRole.ADMIN.value: "/dashboard/admin",
     UserRole.SUPER_ADMIN.value: "/dashboard/super-admin",
 }
-RESET_TOKEN_TTL_MINUTES = 30
-PASSWORD_RESET_MESSAGE = "If an active account exists for that email, a password reset token has been created."
+RESET_TOKEN_TTL_MINUTES = 10
+PASSWORD_RESET_MESSAGE = "If an active account exists for that email, a password reset OTP has been created."
 
 
 def _hash_reset_token(token: str) -> str:
@@ -53,17 +53,17 @@ def _smtp_configured() -> bool:
 
 def _send_password_reset_email(email: str, reset_token: str) -> None:
     message = EmailMessage()
-    message["Subject"] = "SCMXpertLite password reset token"
+    message["Subject"] = "SCMXpertLite password reset OTP"
     message["From"] = app_settings.smtp_from_email
     message["To"] = email
     message.set_content(
         "\n".join(
             [
-                "Use this token to reset your SCMXpertLite password:",
+                "Use this OTP to reset your SCMXpertLite password:",
                 "",
                 reset_token,
                 "",
-                f"This token expires in {RESET_TOKEN_TTL_MINUTES} minutes.",
+                f"This OTP expires in {RESET_TOKEN_TTL_MINUTES} minutes.",
                 "If you did not request a password reset, you can ignore this email.",
             ]
         )
@@ -203,7 +203,7 @@ async def change_user_password(payload: ChangePasswordRequest, current_user: dic
 
 
 async def request_password_reset(payload: ForgotPasswordRequest) -> dict:
-    reset_token = secrets.token_urlsafe(32)
+    reset_token = f"{secrets.randbelow(1_000_000):06d}"
     reset_token_hash = _hash_reset_token(reset_token)
     expires_at = now_utc() + timedelta(minutes=RESET_TOKEN_TTL_MINUTES)
 
@@ -229,7 +229,7 @@ async def request_password_reset(payload: ForgotPasswordRequest) -> dict:
         try:
             _send_password_reset_email(payload.email, reset_token)
             response["email_sent"] = True
-            response["message"] = "Password reset token sent to your email."
+            response["message"] = "Password reset OTP sent to your email."
             return response
         except (OSError, smtplib.SMTPException) as exc:
             if app_settings.environment.lower() == "production":
@@ -241,7 +241,7 @@ async def request_password_reset(payload: ForgotPasswordRequest) -> dict:
     if app_settings.environment.lower() != "production" or not _smtp_configured():
         response["reset_token"] = reset_token
         response["expires_in_minutes"] = RESET_TOKEN_TTL_MINUTES
-        response["message"] = "Email is not configured, so the reset token is shown here for testing."
+        response["message"] = "Email is not configured, so the OTP is shown here for testing."
     return response
 
 
@@ -250,7 +250,7 @@ async def reset_user_password(payload: ResetPasswordRequest) -> dict:
     user = await users_collection.find_one({"email": payload.email})
     invalid_error = HTTPException(
         status_code=status.HTTP_400_BAD_REQUEST,
-        detail="Password reset token is invalid or expired.",
+        detail="Password reset OTP is invalid or expired.",
     )
     if not user or not bool(user.get("is_active", True)) or bool(user.get("is_deleted", False)):
         raise invalid_error
