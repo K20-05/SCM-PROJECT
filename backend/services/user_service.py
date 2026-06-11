@@ -232,16 +232,14 @@ async def request_password_reset(payload: ForgotPasswordRequest) -> dict:
             response["message"] = "Password reset OTP sent to your email."
             return response
         except (OSError, smtplib.SMTPException) as exc:
-            if app_settings.environment.lower() == "production":
-                raise HTTPException(
-                    status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-                    detail="Password reset email could not be sent. Please try again later.",
-                ) from exc
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Password reset email could not be sent. Please check SMTP settings and try again.",
+            ) from exc
 
-    if app_settings.environment.lower() != "production" or not _smtp_configured():
-        response["reset_token"] = reset_token
-        response["expires_in_minutes"] = RESET_TOKEN_TTL_MINUTES
-        response["message"] = "Email is not configured, so the OTP is shown here for testing."
+    response["reset_token"] = reset_token
+    response["expires_in_minutes"] = RESET_TOKEN_TTL_MINUTES
+    response["message"] = "Email is not configured, so the OTP is shown here for testing."
     return response
 
 
