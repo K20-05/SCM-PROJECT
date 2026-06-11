@@ -54,7 +54,8 @@ form::before { content: "Sign into your workspace"; display: block; color: var(-
 .btn:disabled { opacity: .55; cursor: not-allowed; }
 .btn-secondary { background: #334155; }
 .btn-secondary:hover:not(:disabled) { background: #1f2937; }
-.link-button { display: block; margin: 12px auto 0; border: 0; background: transparent; color: var(--brand-dark); cursor: pointer; font-family: var(--font-app); font-size: .9rem; font-weight: 800; text-decoration: underline; }
+.link-button { appearance: none; display: block; width: auto; min-height: 0; margin: 12px auto 0; padding: 0; border: 0; border-radius: 0; background: transparent; color: var(--brand-dark); cursor: pointer; font-family: var(--font-app); font-size: .9rem; font-weight: 800; line-height: 1.2; text-align: center; text-decoration: underline; }
+.link-button:hover { color: var(--brand); }
 .forgot-panel { width: 100%; margin-top: 12px; }
 .signup-link { margin-top: 16px; color: var(--muted); text-align: center; font-size: .9rem; }
 .signup-link a { color: var(--brand-dark); font-weight: 800; }
