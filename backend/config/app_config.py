@@ -27,6 +27,12 @@ class Settings(BaseSettings):
     auth_rate_limit_window_seconds: int = Field(default=60, validation_alias="AUTH_RATE_LIMIT_WINDOW_SECONDS")
     recaptcha_site_key: str = Field(default="", validation_alias="RECAPTCHA_SITE_KEY")
     recaptcha_secret_key: str = Field(default="", validation_alias="RECAPTCHA_SECRET_KEY")
+    smtp_host: str = Field(default="", validation_alias="SMTP_HOST")
+    smtp_port: int = Field(default=587, validation_alias="SMTP_PORT")
+    smtp_username: str = Field(default="", validation_alias="SMTP_USERNAME")
+    smtp_password: str = Field(default="", validation_alias="SMTP_PASSWORD")
+    smtp_from_email: str = Field(default="", validation_alias="SMTP_FROM_EMAIL")
+    smtp_use_tls: bool = Field(default=True, validation_alias="SMTP_USE_TLS")
 
     users_collection_name: str = Field(default="users", validation_alias="USERS_COLLECTION_NAME")
     logins_collection_name: str = Field(default="login", validation_alias="LOGINS_COLLECTION_NAME")

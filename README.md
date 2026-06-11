@@ -57,8 +57,9 @@ SCMXPertLite is a lightweight shipment tracking platform with role-based user ac
 
 ## Password Reset
 - Login includes a forgot-password flow.
-- In non-production environments, the reset endpoint returns the token so the flow can be tested without email infrastructure.
-- In production, connect `/api/auth/forgot-password` to an email sender and deliver the generated token out of band.
+- Configure SMTP with `SMTP_HOST`, `SMTP_PORT`, `SMTP_USERNAME`, `SMTP_PASSWORD`, `SMTP_FROM_EMAIL`, and `SMTP_USE_TLS` to email reset tokens.
+- Without SMTP settings, the reset endpoint returns the token so the flow can be tested locally and the login page fills it into the reset form.
+- For Gmail, create an app password and use it as `SMTP_PASSWORD`; normal account passwords usually will not work.
 
 ## Production Notes
 - The built-in authentication rate limiter is process-local. For multi-worker or deployed production use, replace it with a shared store such as Redis so limits apply consistently across instances.

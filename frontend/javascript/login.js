@@ -223,7 +223,10 @@ forgotForm?.addEventListener("submit", async (event) => {
     resetEmail.value = email;
     if (data.reset_token) {
       resetToken.value = data.reset_token;
-      setMessage(`Reset token created. It expires in ${data.expires_in_minutes || 30} minutes.`, "success");
+      const prefix = data.message || "Reset token created.";
+      setMessage(`${prefix} It expires in ${data.expires_in_minutes || 30} minutes.`, "success");
+    } else if (data.email_sent) {
+      setMessage(data.message || "Password reset token sent to your email.", "success");
     } else {
       setMessage(data.message || "If the account exists, reset instructions have been created.", "success");
     }

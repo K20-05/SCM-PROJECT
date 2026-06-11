@@ -45,10 +45,12 @@ def test_password_reset_request_returns_development_token(monkeypatch):
     users = _FakeUsersCollection(user)
     monkeypatch.setattr(user_service, "get_users_collection", lambda: users)
     monkeypatch.setattr(user_service.app_settings, "environment", "dev")
+    monkeypatch.setattr(user_service.app_settings, "smtp_host", "")
+    monkeypatch.setattr(user_service.app_settings, "smtp_from_email", "")
 
     result = asyncio.run(user_service.request_password_reset(ForgotPasswordRequest(email=user["email"])))
 
-    assert result["message"] == user_service.PASSWORD_RESET_MESSAGE
+    assert result["message"] == "Email is not configured, so the reset token is shown here for testing."
     assert result["reset_token"]
     assert user["password_reset_token_hash"] == user_service._hash_reset_token(result["reset_token"])
     assert user["password_reset_expires_at"] > now_utc()

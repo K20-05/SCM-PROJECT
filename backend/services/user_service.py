@@ -1,6 +1,8 @@
 from datetime import timezone, timedelta
 import hashlib
+from email.message import EmailMessage
 import secrets
+import smtplib
 
 from fastapi import HTTPException, status
 from pymongo.errors import DuplicateKeyError, PyMongoError
@@ -43,6 +45,36 @@ def _reset_token_expired(expires_at) -> bool:
     if expires_at.tzinfo is None:
         expires_at = expires_at.replace(tzinfo=timezone.utc)
     return expires_at < now_utc()
+
+
+def _smtp_configured() -> bool:
+    return bool(app_settings.smtp_host and app_settings.smtp_from_email)
+
+
+def _send_password_reset_email(email: str, reset_token: str) -> None:
+    message = EmailMessage()
+    message["Subject"] = "SCMXpertLite password reset token"
+    message["From"] = app_settings.smtp_from_email
+    message["To"] = email
+    message.set_content(
+        "\n".join(
+            [
+                "Use this token to reset your SCMXpertLite password:",
+                "",
+                reset_token,
+                "",
+                f"This token expires in {RESET_TOKEN_TTL_MINUTES} minutes.",
+                "If you did not request a password reset, you can ignore this email.",
+            ]
+        )
+    )
+
+    with smtplib.SMTP(app_settings.smtp_host, app_settings.smtp_port, timeout=10) as smtp:
+        if app_settings.smtp_use_tls:
+            smtp.starttls()
+        if app_settings.smtp_username:
+            smtp.login(app_settings.smtp_username, app_settings.smtp_password)
+        smtp.send_message(message)
 
 
 def token_for_user(user: dict) -> Token:
@@ -193,9 +225,23 @@ async def request_password_reset(payload: ForgotPasswordRequest) -> dict:
         },
     )
 
-    if app_settings.environment.lower() != "production":
+    if _smtp_configured():
+        try:
+            _send_password_reset_email(payload.email, reset_token)
+            response["email_sent"] = True
+            response["message"] = "Password reset token sent to your email."
+            return response
+        except (OSError, smtplib.SMTPException) as exc:
+            if app_settings.environment.lower() == "production":
+                raise HTTPException(
+                    status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                    detail="Password reset email could not be sent. Please try again later.",
+                ) from exc
+
+    if app_settings.environment.lower() != "production" or not _smtp_configured():
         response["reset_token"] = reset_token
         response["expires_in_minutes"] = RESET_TOKEN_TTL_MINUTES
+        response["message"] = "Email is not configured, so the reset token is shown here for testing."
     return response
 
 
